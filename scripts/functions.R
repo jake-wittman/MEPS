@@ -2,15 +2,6 @@
 library(tidyverse)
 library(haven)
 
-readGraspData <- function(filepath) {
-  if (file.exists(filepath)) {
-  haven::read_sas(filepath)
-  } else {
-    print('File not found')
-  }
-}
-
-
 # Read in data
 readAndSelect <- function(data_path, data_year) {
   yr <- substr(data_year, 7, 8)
@@ -50,7 +41,7 @@ readAndSelect <- function(data_path, data_year) {
            starts_with('VARSTR'), # Strata
            # starts_with('INSCOV'), # Insurance coverage variable
            starts_with('HIDEG'), # Highest degree - want only HIDEGYR and HIDEG
-           starts_with('HIDEG'), # Highest degree when first entered MEPS
+           starts_with('EDUYRDG'), #
            starts_with('TTLP'), # Total income
            starts_with('POVCAT'), # Categorical poverty status
            #starts_with('POVLEV'), # Continuous poverty status
@@ -73,6 +64,7 @@ readAndSelect <- function(data_path, data_year) {
            -contains('AGE31X'),
            -contains('AGE42X'),
            -contains('AGE53x'), # Remove some of the extra age variables
+           -contains('DSFLNV'), # Remove the never had flu shot
            starts_with('PERWT'), # Person weight level. Not sure I need this, since just working with DCS variables
            starts_with('INSCOP') # Inscope, again not sure if needed but putting here anyway for now
     )
@@ -94,7 +86,7 @@ cleanMepsData <- function(dat) {
         case_when(
           DSA1C53 == -1 ~ 'Inapplicable',
           DSA1C53 == -7 ~ 'Refused',
-          DSA1C53 == -8 ~ 'DK',
+          DSA1C53 == -8 ~ 'Do not know',
           DSA1C53 == -9 ~ 'Not ascertained',
           DSA1C53 == -15 ~ 'Cannot be computed',
           DSA1C53 %in% c(0, 1, 96) ~ 'Less than 2 or more A1C tests in a year',
@@ -105,12 +97,13 @@ cleanMepsData <- function(dat) {
 
       DSCKFT53 = as.factor(
         case_when(
-          DSCKFT53 >= 1 ~ 'Within last year',
-          DSCKFT53 == 0 ~ 'No foot examinations in a year',
+          DSCKFT53 >= 1 ~ 'YES',
+          DSCKFT53 == 0 ~ 'NO',
           DSCKFT53 == -1 ~ 'Inapplicable',
           DSCKFT53 == -7 ~ 'Refused',
-          DSCKFT53 == -8 ~ 'DK',
-          DSCKFT53 == -9 ~ 'Not ascertained'
+          DSCKFT53 == -8 ~ 'Do not know',
+          DSCKFT53 == -9 ~ 'Not ascertained',
+          DSCKFT53 == -15 ~ 'Cannot be computed',
         )
       )
     ) %>%
@@ -124,6 +117,7 @@ cleanMepsData <- function(dat) {
           FLUSHT53,
           HIDEGYR,
           HIDEG,
+          EDUYRDG,
           RACEX,
           RACETHNX,
           USBORN42
@@ -142,8 +136,10 @@ cleanMepsData <- function(dat) {
                   ends_with('53')),
         ~ recode_factor(
           .x,
+          `-15` = 'Cannot be computed',
           `-9` = 'Not ascertained',
-          `-8` = 'DK',
+          `-8` = 'Do not know',
+          `-7` = 'Refused',
           `-1` = 'Inapplicable',
           `1` = 'YES',
           `2` = 'NO'
@@ -154,8 +150,10 @@ cleanMepsData <- function(dat) {
                   ends_with('53')),
         ~ recode_factor(
           .x,
+          `-15` = 'Cannot be computed',
           `-9` = 'Not ascertained',
-          `-8` = 'DK',
+          `-8` = 'Do not know',
+          `-7` = 'Refused',
           `-1` = 'Inapplicable',
           `1` = 'Within last year',
           `2` = 'NO'
@@ -166,8 +164,10 @@ cleanMepsData <- function(dat) {
                   ends_with('53')),
         ~ recode_factor(
           .x,
+          `-15` = 'Cannot be computed',
           `-9` = 'Not ascertained',
-          `-8` = 'DK',
+          `-8` = 'Do not know',
+          `-7` = 'Refused',
           `-1` = 'Inapplicable',
           `1` = 'Within last year',
           `2` = 'NO'
@@ -178,10 +178,12 @@ cleanMepsData <- function(dat) {
                   ends_with('53')),
         ~ recode_factor(
           .x,
+          `-15` = 'Cannot be computed',
           `-9` = 'Not ascertained',
-          `-8` = 'DK',
+          `-8` = 'Do not know',
+          `-7` = 'Refused',
           `-1` = 'Inapplicable',
-          `1` = 'Within last year',
+          `1` = 'YES',
           `2` = 'NO'
         )
       ),
@@ -196,9 +198,11 @@ cleanMepsData <- function(dat) {
         starts_with('HIDE'),
         ~ recode_factor(
           .x,
+          `-15` = 'Cannot be computed',
           `-9` = 'Not ascertained',
-          `-8` = 'DK',
+          `-8` = 'Do not know',
           `-7` = 'Refused',
+          `-1` = 'Inapplicable',
           `1` = 'No Degree',
           `2` = 'GED',
           `3` = 'HS',
@@ -212,9 +216,33 @@ cleanMepsData <- function(dat) {
             `Less than high school` = c('No Degree', 'GED', 'Under 16, inapplicable'),
             `High school` = c('HS'),
             `Greater than HS` = c('Bachelor', 'Masters', 'Doctorate', 'Other'),
-            `Not available` = c('Not ascertained', 'DK', 'Refused', '-1', '-15')
+            `Not available` = c('Not ascertained', 'Do not know', 'Refused', 'Inapplicable', 'Cannot be computed')
           )
       ),
+      EDUYRDG = recode_factor(
+        EDUYRDG,
+        `-15` = 'Cannot be computed',
+        `-9` = 'Not ascertained',
+        `-8` = 'Do not know',
+        `-7` = 'Refused',
+        `-1` = 'Inapplicable',
+        `1` = '<= 8th grade',
+        `2` = 'No High School',
+        `3` = 'GED',
+        `4` = 'High School',
+        `5` = 'Some college',
+        `6` = 'Associate Occupational/Technical',
+        `7` =  'Associate Academic',
+        `8` = 'Bachelor',
+        `9` = 'Master, Professional, or Doctorate',
+        `10` = 'Child under 5 years old'
+      ) %>%
+        fct_collapse(
+          `Less than high school` = c('<= 8th grade', 'No High School', 'GED'),
+          `High school` = c('High School', 'Some college'),
+          `Greater than HS` = c('Associate Occupational/Technical', 'Associate Academic', 'Bachelor', 'Master, Professional, or Doctorate'),
+          `Not available` = c('Not ascertained', 'Do not know', 'Refused', 'Inapplicable', 'Cannot be computed', 'Child under 5 years old')
+        ),
       across(
         c(RACEX, RACEV1X),
         ~ recode_factor(
@@ -225,9 +253,11 @@ cleanMepsData <- function(dat) {
           `4` = 'Asian',
           `5` = 'Native Hawiian/Pacific Islander',
           `6` = 'Multiple races reported',
+          `-15` = 'Cannot be computed',
           `-9` = 'Not ascertained',
-          `-8` = 'DK',
-          `-7` = 'Refused'
+          `-8` = 'Do not know',
+          `-7` = 'Refused',
+          `-1` = 'Inapplicable',
         )
       ),
       RACETHNX = recode_factor(
@@ -247,8 +277,9 @@ cleanMepsData <- function(dat) {
       ),
       USBORN42 = recode_factor(
         USBORN42,
+        `-15` = 'Cannot be computed',
         `-9` = 'Not ascertained',
-        `-8` = 'DK',
+        `-8` = 'Do not know',
         `-7` = 'Refused',
         `-1` = 'Inapplicable',
         `1` = 'Yes',
@@ -258,7 +289,7 @@ cleanMepsData <- function(dat) {
         BORNUSA,
         `-15` = 'Cannot be computed',
         `-9` = 'Not ascertained',
-        `-8` = 'DK',
+        `-8` = 'Do not know',
         `-7` = 'Refused',
         `-1` = 'Inapplicable',
         `1` = 'Yes',
@@ -268,8 +299,9 @@ cleanMepsData <- function(dat) {
         c(CHOLCK53, CHECK53, FLUSHT53),
         ~ recode_factor(
           .x,
+          `-15` = 'Cannot be computed',
           `-9` = 'Not ascertained',
-          `-8` = 'DK',
+          `-8` = 'Do not know',
           `-7` = 'Refused',
           `-1` = 'Inapplicable',
           `1` = 'Within last year',
@@ -280,7 +312,7 @@ cleanMepsData <- function(dat) {
           `6` = 'Never'
         ) %>%
           fct_collapse(
-            `Within last 2 more more years` = c(
+            `Within last 2 or more years` = c(
               'Within past 2 years',
               'Within past 3 years',
               'Within past 5 years',
@@ -289,7 +321,7 @@ cleanMepsData <- function(dat) {
             ),
             `Not available` = c(
               'Not ascertained',
-              'DK',
+              'Do not know',
               'Refused',
               'Inapplicable'
             )
@@ -297,8 +329,9 @@ cleanMepsData <- function(dat) {
       ),
       DENTCK53 = recode_factor(
         DENTCK53,
+        `-15` = 'Cannot be computed',
         `-9` = 'Not ascertained',
-        `-8` = 'DK',
+        `-8` = 'Do not know',
         `-7` = 'Refused',
         `-1` = 'Inapplicable',
         `1` = 'Twice a year or more',
@@ -327,7 +360,7 @@ coalesceData <- function(dat) {
   dat <- dat %>%
     mutate(
       DSEY_all = coalesce(!!!select(., starts_with('DSEY'))),
-      HIDEG_all = coalesce(!!!select(., starts_with('HIDEG'))),
+      HIDEG_all = coalesce(!!!select(., starts_with('HIDEG'), starts_with('EDUY'))),
       DIABW = coalesce(!!!select(., starts_with('DIABW'))),
       POVCAT_all = coalesce(!!!select(., starts_with('POVCAT'))),
       USBORN_all = coalesce(!!!select(., contains('BORN'))),
@@ -354,9 +387,21 @@ coalesceData <- function(dat) {
     )
 }
 
-calcProp <- function(data, year, variable) {
+relevelFactors <- function(dat) {
+  dat %>%
+    mutate(DSEY_all = fct_relevel(DSEY_all, 'YES', 'NO', 'Not ascertained', 'Do not know', 'Cannot be computed'),
+           FEET_all = fct_relevel(FEET_all, 'YES', 'NO', 'Not ascertained', 'Do not know', 'Inapplicable', 'Cannot be computed'),
+           CHOL_all = fct_relevel(CHOL_all, 'Within last year', 'Within last 2 or more years', 'NO', 'Not ascertained', 'Do not know', 'Inapplicable', 'Cannot be computed'),
+           FLU_all = fct_relevel(FLU_all, 'Within last year', 'Within last 2 or more years', 'NO', 'Not ascertained', 'Do not know', 'Refused', 'Inapplicable', 'Cannot be computed'),
+           DENT_all = fct_relevel(DENT_all, 'Twice a year or more', 'Once a year', 'Less than once a year', 'Never go to dentist', 'Not ascertained', 'Do not know', 'Refused', 'Inapplicable'),
+           DSA1C53 = fct_relevel(DSA1C53, '2 or more A1C tests in a year', 'Less than 2 or more A1C tests in a year', 'Not ascertained', 'Do not know', 'Inapplicable', 'Cannot be computed'),
+           )
+}
+
+calcProp <- function(data, year, variable = NULL) {
   if (is.character(variable)) {
     vari <- enquo(variable)
+    data[[variable]] <- forcats::fct_drop(data[[variable]])
     diab_svy <- data %>%
       as_survey_design(
         ids = VARPSU_all,
@@ -364,14 +409,19 @@ calcProp <- function(data, year, variable) {
         strata = VARSTR_all,
         nest = TRUE
       )
+    npsu <- nrow(unique(diab_svy$cluster))
+    nstrata <- nrow(unique(diab_svy$strata))
+    df <- npsu - nstrata
     diab_svy %>%
       tab_survey(
-        CHOL_all, FLU_all, DENT_all, DSA1C53, DSEY_all, FEET_all, #CHECK53 - not in all years
+         FLU_all, DSA1C53, DSEY_all, FEET_all, #CHECK53, CHOL_all, DENT_all
         pretty = FALSE,
         strata = !!vari,
         wide = FALSE,
-        method = 'mean'
-        #drop = c('Not ascertained', 'DK', 'Refused', 'Inapplicable'),
+        method = 'beta',
+        deff = TRUE,
+        row_total = TRUE
+        #drop = c('Not ascertained', 'Do not know', 'Refused', 'Inapplicable'),
         # keep = c(
         #   'Within last year',
         #   '2 or more A1C tests in a year',
@@ -381,7 +431,8 @@ calcProp <- function(data, year, variable) {
         #   'YES' # eye exam
         # )
       ) %>%
-      mutate(year = year)
+      mutate(year = as.numeric(year),
+             df = df)
   } else {
     vari <- variable
     diab_svy <- data %>%
@@ -391,14 +442,19 @@ calcProp <- function(data, year, variable) {
         strata = VARSTR_all,
         nest = TRUE
       )
+    npsu <- nrow(unique(diab_svy$cluster))
+    nstrata <- nrow(unique(diab_svy$strata))
+    df <- npsu - nstrata
     diab_svy %>%
       tab_survey(
-        CHOL_all, FLU_all, DENT_all, DSA1C53, DSEY_all, FEET_all, #CHECK53 - not in all years
+        FLU_all, DSA1C53, DSEY_all, FEET_all, #CHECK53, CHOL_all, DENT_all
         pretty = FALSE,
         strata = vari,
         wide = FALSE,
-        method = 'mean'
-        #drop = c('Not ascertained', 'DK', 'Refused', 'Inapplicable'),
+        method = 'beta',
+        deff = TRUE,
+        row_total = TRUE
+        #drop = c('Not ascertained', 'Do not know', 'Refused', 'Inapplicable'),
         # keep = c(
         #   'Within last year',
         #   '2 or more A1C tests in a year',
@@ -408,9 +464,330 @@ calcProp <- function(data, year, variable) {
         #   'YES' # eye exam
         # )
       ) %>%
-      mutate(year = as.numeric(year))
+      mutate(year = as.numeric(year),
+             df = df)
   }
 
 }
 safelyCalcProp <- safely(calcProp)
 possiblyCalcProp <- possibly(calcProp, otherwise = NULL)
+
+# Combine dashboard with MEPS data
+combineOverall <- function(meps_data, dash_data) {
+  overall_indicator <- meps_data %>%
+    mutate(
+      variable = case_when(
+        variable == 'FLU_all' ~ 'flu',
+        variable == 'DSEY_all' ~ 'eye-exam',
+        variable == 'DSA1C53' ~ 'a1c',
+        variable == 'FEET_all' ~ 'foot',
+        TRUE ~ variable
+      )
+    ) %>%
+    left_join(.,
+              dplyr::filter(dash_data, stratifier == 'total'),
+              by = c('year', 'variable' = 'indicator'))
+}
+combineRace <- function(meps_data, dash_data) {
+  race_indicator <- meps_data %>%
+    mutate(
+      variable = case_when(
+        variable == 'FLU_all' ~ 'flu',
+        variable == 'DSEY_all' ~ 'eye-exam',
+        variable == 'DSA1C53' ~ 'a1c',
+        variable == 'FEET_all' ~ 'foot',
+        TRUE ~ variable
+      ),
+      RACE_all = case_when(
+        RACE_all == 'Hispanic' ~ 'hispanic',
+        RACE_all == 'Black/Not Hispanic' ~ 'black',
+        RACE_all == 'White/Not Hispanic' ~ 'white',
+        RACE_all == 'Asian/Not Hispanic' ~ 'asian',
+        TRUE ~ as.character(RACE_all)
+      )
+    ) %>%
+    left_join(
+      .,
+      dplyr::filter(dash_data, stratifier == 'race'),
+      by = c('year', 'variable' = 'indicator', 'RACE_all' = 'strata')
+    )
+
+}
+combineSex <- function(meps_data, dash_data) {
+  sex_indicator <- meps_data %>%
+    mutate(
+      variable = case_when(
+        variable == 'FLU_all' ~ 'flu',
+        variable == 'DSEY_all' ~ 'eye-exam',
+        variable == 'DSA1C53' ~ 'a1c',
+        variable == 'FEET_all' ~ 'foot',
+        TRUE ~ variable
+      ),
+      SEX = case_when(SEX == 'Male' ~ 'M',
+                      SEX == 'Female' ~ 'F')
+    ) %>%
+    left_join(
+      .,
+      dplyr::filter(dash_data, stratifier == 'gender'),
+      by = c('year', 'variable' = 'indicator', 'SEX' = 'strata')
+    )
+}
+combineEdu <- function(meps_data, dash_data) {
+  edu_indicator <- meps_data %>%
+    mutate(
+      variable = case_when(
+        variable == 'FLU_all' ~ 'flu',
+        variable == 'DSEY_all' ~ 'eye-exam',
+        variable == 'DSA1C53' ~ 'a1c',
+        variable == 'FEET_all' ~ 'foot',
+        TRUE ~ variable
+      ),
+      HIDEG_all = case_when(
+        HIDEG_all == 'Greater than HS' ~ 'greater-than-HS',
+        HIDEG_all == 'Less than high school' ~ 'less-than-HS',
+        HIDEG_all == 'High school' ~ 'HS',
+        TRUE ~ as.character(HIDEG_all)
+      )
+    ) %>%
+    left_join(
+      .,
+      dplyr::filter(dash_data, stratifier == 'edu'),
+      by = c('year', 'variable' = 'indicator', 'HIDEG_all' = 'strata')
+    )
+}
+
+plotTrends <- function(data, strata) {
+  if (is.null(strata) == TRUE) {
+    data %>%
+      dplyr::filter(variable %in% c('a1c', 'eye-exam', 'flu', 'foot'),
+                    value %in% c(
+                      'Within last year',
+                      '2 or more A1C tests in a year',
+                      '1 or more foot examinations in a year',
+                      'Once a year',
+                      'YES'
+                    )) %>%
+      ggplot() +
+      geom_line(aes(
+        x = year,
+        y = proportion,
+        group = variable,
+        linetype = 'MEPS'
+      )) +
+      geom_line(aes(
+        x = year,
+        y = percentage,
+        group = variable,
+        linetype = 'Dashboard'
+      )) +
+      facet_wrap(~ variable) +
+      theme_bw()
+
+  } else {
+
+  data %>%
+  dplyr::filter(variable %in% c('a1c', 'eye-exam', 'flu', 'foot'),
+                value %in% c(
+                  'Within last year',
+                  '2 or more A1C tests in a year',
+                  '1 or more foot examinations in a year',
+                  'Once a year',
+                  #Dental checkups
+                  'YES' # eye exam
+                )) %>%
+    ggplot(.) +
+    geom_line(aes(
+      x = year,
+      y = proportion,
+      group = .data[[strata]],
+      color = .data[[strata]],
+      linetype = 'MEPS'
+    )) +
+    geom_line(aes(
+      x = year,
+      y = percentage,
+      group = .data[[strata]],
+      color = .data[[strata]],
+      linetype = 'Dashboard'
+    )) +
+    facet_wrap(~ variable) +
+    scale_linetype_manual(labels = c('Dashboard', 'MEPS'),
+                          values = c('solid', 'dashed')) +
+    theme_bw()
+  }
+}
+
+createTable <- function(survey.object, by = NULL) {
+    tbl_svysummary(
+      survey.object,
+      by = by,
+      include = c(CHOL_all,
+                  FLU_all,
+                  DENT_all,
+                  DSA1C53,
+                  DSEY_all,
+                  FEET_all),
+      label = list(DSEY_all ~ 'Dilated eye exam in the last year',
+                   CHOL_all ~ 'Cholesterol tested',
+                   FLU_all ~ 'Flu shot',
+                   DENT_all ~ '2 or more dentist visits in the last year',
+                   DSA1C53 ~ '2 or more A1C tests in the last year',
+                   FEET_all ~ 'Foot checked')
+    )
+
+}
+
+createTableAllStats <- function(survey.object, by = NULL, data) {
+  out_table <- tbl_svysummary(
+    survey.object,
+    by = by,
+    digits = list(everything() ~ 12),
+    include = c(CHOL_all,
+                FLU_all,
+                DENT_all,
+                DSA1C53,
+                DSEY_all,
+                FEET_all),
+    label = list(DSEY_all ~ 'Dilated eye exam in the last year',
+                 CHOL_all ~ 'Cholesterol tested',
+                 FLU_all ~ 'Flu shot',
+                 DENT_all ~ '2 or more dentist visits in the last year',
+                 DSA1C53 ~ '2 or more A1C tests in the last year',
+                 FEET_all ~ 'Foot checked'),
+    statistic = list(all_categorical() ~ "{n}-{N}-{p}-{p.std.error}-{n_unweighted}-{N_unweighted}-{p_unweighted}")
+  )
+  out_table$table_body <- out_table$table_body %>%
+    mutate(
+      year = data$year[1],
+      variable = case_when(
+        variable == 'FLU_all' ~ 'flu',
+        variable == 'DSEY_all' ~ 'eye-exam',
+        variable == 'DSA1C53' ~ 'a1c',
+        variable == 'FEET_all' ~ 'foot',
+        TRUE ~ variable
+      )
+    )
+  if (is.null(by) == FALSE) {
+    names(out_table$table_body)[str_detect(names(out_table$table_body), pattern = 'stat')] <-
+      levels(data[[by]])
+  }
+  return(out_table$table_body)
+
+}
+
+makeTablesLonger <- function(table) {
+  col_names <- c('n', 'N', 'p', 'p.std.error', 'n_unweighted', 'N_unweighted', 'p_unweighted')
+  table %>%
+    filter(row_type != 'label') %>%
+    pivot_longer(cols = -c(variable, var_type, var_label, row_type, label, year),
+                 names_to = "strata",
+                 values_to = 'parameters') %>%
+    separate(parameters, into = col_names, sep = "-") %>%
+    mutate(across(n:p_unweighted, ~as.numeric(gsub(",", "", .x))))
+
+}
+# Need to join the estimates from tbl_svysummary to the rest of the
+# estimates for all the relevant parameters for determining suppression.
+joinTables <- function(indicator_table, suppression_table, variable = NULL) {
+  if (is.null(variable)) {
+    left_join(
+      indicator_table,
+      mutate(
+        suppression_table,
+        year = as.numeric(year),
+        variable = case_when(variable == 'FLU_all' ~ 'flu',
+                             variable == 'DSA1C53' ~ 'a1c',
+                             variable == 'DSEY_all' ~ 'eye-exam',
+                             variable == 'FEET_all' ~ 'foot',
+                             TRUE ~ variable)
+      ),
+      by = c('variable', 'value' = 'label', 'year')
+    )
+  }
+  else if (variable == 'sex') {
+    left_join(
+      indicator_table,
+      mutate(
+        suppression_table,
+        strata = case_when(strata == 'Male' ~ 'M', strata == 'Female' ~ 'F'),
+        year = as.numeric(year),
+        variable = case_when(variable == 'FLU_all' ~ 'flu',
+                             variable == 'DSA1C53' ~ 'a1c',
+                             variable == 'DSEY_all' ~ 'eye-exam',
+                             variable == 'FEET_all' ~ 'foot',
+                             TRUE ~ variable)
+      ),
+      by = c('variable', 'value' = 'label', 'year', 'SEX' = 'strata')
+    )
+  } else if (variable == 'race') {
+    left_join(
+      indicator_table,
+      mutate(
+        suppression_table,
+        strata = case_when(strata == 'Hispanic' ~ 'hispanic',
+                           strata == 'Black/Not Hispanic' ~ 'black',
+                           strata == 'Asian/Not Hispanic' ~ 'asian',
+                           strata == 'White/Not Hispanic' ~ 'white',
+                           TRUE ~ strata),
+        year = as.numeric(year),
+        variable = case_when(variable == 'FLU_all' ~ 'flu',
+                             variable == 'DSA1C53' ~ 'a1c',
+                             variable == 'DSEY_all' ~ 'eye-exam',
+                             variable == 'FEET_all' ~ 'foot',
+                             TRUE ~ variable)
+      ),
+      by = c('variable', 'value' = 'label', 'year', 'RACE_all' = 'strata')
+    )
+  } else if (variable == 'edu') {
+    left_join(
+      indicator_table,
+      mutate(
+        suppression_table,
+        strata = case_when(strata == 'Less than high school' ~ 'less-than-HS',
+                           strata == 'High school' ~ 'HS',
+                           strata == 'Greater than HS' ~ 'greater-than-HS',
+                           TRUE ~ strata),
+        year = as.numeric(year),
+        variable = case_when(variable == 'FLU_all' ~ 'flu',
+                             variable == 'DSA1C53' ~ 'a1c',
+                             variable == 'DSEY_all' ~ 'eye-exam',
+                             variable == 'FEET_all' ~ 'foot',
+                             TRUE ~ variable)
+      ),
+      by = c('variable', 'value' = 'label', 'year', 'HIDEG_all' = 'strata')
+    )
+  }
+}
+
+suppressData <- function(data) {
+  data %>%
+    mutate(
+      var = p.std.error ^ 2,
+      num = p * (100 - p),
+      ess = num / var,
+      rse = (p.std.error / p) * 100,
+      abs_ci_width = (upper_limit * 100) - (lower_limit * 100),
+      rel_ci_width = (abs_ci_width / p) * 100
+    ) %>%
+  mutate(
+    FLAG = case_when(
+      N < 30 | ess < 30 ~ 'Nominal or Effective Sample Size < 30',
+      abs_ci_width >= 30 ~ 'Absolute value of CI Width >= 30',
+      abs_ci_width <= 5 ~ 'Absolute value of CI Width <= 5',
+      rel_ci_width > 130 ~ 'Relative CI Width >130% of proportion',
+      n.x == 0 ~ 'Number of events = 0',
+      df < 8 ~ 'Degress of freedom < 8',
+      TRUE ~ 'No flag'
+    ),
+    ACTION = case_when(
+      FLAG %in% c('Nominal or Effective Sample Size < 30', 'Absolute value of CI Width >= 30') ~ 'Suppress',
+      FLAG == 'Number of events = 0' | (FLAG != 'Number of events = 0' & FLAG == 'Degress of freedom < 8') ~ 'Review',
+      FLAG == 'Relative CI Width >130% of proportion' ~ 'Suppress',
+      TRUE ~ 'Okay'
+    ),
+    proportion = case_when(
+      ACTION == 'Supress' ~ NA_real_,
+      TRUE ~ proportion
+    )
+  )
+}
