@@ -14,7 +14,7 @@ options(clustermq.scheduler = 'multiprocess')
 
 # Set target options:
 tar_option_set(
-  packages = c("tidyverse", "haven", 'sitrep', 'gtsummary', 'srvyr'),
+  packages = c("tidyverse", "haven", 'sitrep', 'gtsummary', 'srvyr', 'dtplyr'),
   # packages that your targets need to run
   format = "rds" # default storage format
   # Set other options as needed.
@@ -26,6 +26,9 @@ tar_source('scripts/functions.R')
 
 # Replace the target list below with your own:
 list(
+
+# Set up data -------------------------------------------------------------
+
 
   # Get MEPS files
   tar_target(
@@ -46,17 +49,21 @@ list(
       setNames(dat_names)
   ),
   tar_target(dat,
-             bind_rows(dat_list, .id = 'year')),
+             bind_rows(dat_list, .id = 'year'),
+             format = 'parquet'),
   # Clean data
   tar_target(cleaned_dat,
-             cleanMepsData(dat)),
+             cleanMepsData(dat),
+             format = 'parquet'),
   tar_target(combined_dat,
-             coalesceData(cleaned_dat)),
+             coalesceData(cleaned_dat),
+             format = 'parquet'),
   tar_target(releveled_dat,
-             relevelFactors(combined_dat)),
+             relevelFactors(combined_dat),
+             format = 'parquet'),
   # Get down to just the columns we want
   tar_target(
-    diab_dat,
+    diab_dat_sub,
     select(
       releveled_dat,
       year,
@@ -67,16 +74,26 @@ list(
       CHOLCK53,
       FLUSHT53,
       CHECK53,
-      DENTCK53,
       DSA1C53,
-      DSCKFT53
+      DSCKFT53,
+      PERWT,
     ) %>%
-      mutate(year = str_extract(year, '[0-9]{4}'))
+      mutate(year = as.numeric(str_extract(year, '[0-9]{4}'))) %>%
+      filter(year >= 2008),
+    format = 'parquet'
+  ),
+  tar_target(
+    diab_dat,
+    cumulativePractices(diab_dat_sub)
   ),
   tar_target(diab_list,
              diab_dat %>% group_split(year),
              iteration = 'list'),
-  tar_target(years, as.list(2001:2020)),
+  tar_target(years, as.list(2008:2020)),
+
+# Calculate proportions ---------------------------------------------------
+
+
   tar_target(
     overall,
     calcProp(diab_list, years, NULL),
@@ -98,14 +115,33 @@ list(
     pattern = map(diab_list, years)
   ),
   tar_target(
-    age,
-    safelyCalcProp(diab_list, years, "AGE_all"),
+    ages,
+    calcProp(diab_list, years, "AGE_all"),
     pattern = map(diab_list, years)
   ),
+  tar_target(
+    pov,
+    calcProp(diab_list, years, 'POVCAT_all'),
+    pattern = map(diab_list, years)
+  ),
+  tar_target(
+    region,
+    calcProp(diab_list, years, 'REGION_all'),
+    pattern = map(diab_list, years)
+  ),
+  tar_target(
+    insurance,
+    calcProp(diab_list, years, 'INSCOV_all'),
+    pattern = map(diab_list, years)
+    ),
   tar_target(dash_files,
              list.files(
                here::here('data', 'dashboard'), full.names = TRUE
              )),
+
+# Get Dashboard data ------------------------------------------------------
+
+
   tar_target(dash_file_names, str_extract(list.files(
     here::here('data', 'dashboard')
   ), '^([^.])+')),
@@ -143,6 +179,8 @@ list(
              combineRace(race, dash_dat)),
   tar_target(edu_indicator,
              combineEdu(edu, dash_dat)),
+  # tar_target(age_indicator,
+  #            combineEdu(age, dash_dat)),
   tar_target(overall_trend,
              plotTrends(overall_indicator, NULL)),
   tar_target(sex_trend,
@@ -151,6 +189,12 @@ list(
              plotTrends(race_indicator, strata = 'RACE_all')),
   tar_target(edu_trend,
              plotTrends(edu_indicator, strata = 'HIDEG_all')),
+  # tar_target(age_trend,
+  #            plotTrends(edu_indicator, strata = 'AGE_all')),
+
+# Yearly tables by stratifier ---------------------------------------------
+
+
   tar_target(
     diab_all_srvy,
     diab_dat %>%
@@ -161,8 +205,10 @@ list(
         nest = TRUE
       )
   ),
-  tar_target(giant_table,
-             createTable(diab_all_srvy, by = 'year')),
+  tar_target(
+    giant_table,
+    createTable(diab_all_srvy, by = 'year')
+    ),
   tar_target(
     yearly_tables,
     diab_list %>%
@@ -201,6 +247,18 @@ list(
     pattern = map(diab_list)
   ),
   tar_target(
+    age_table,
+    diab_list %>%
+      as_survey_design(
+        ids = VARPSU_all,
+        weights = DIABW,
+        strata = VARSTR_all,
+        nest = TRUE
+      ) %>%
+      createTable(., by = "AGE_all"),
+    pattern = map(diab_list)
+  ),
+  tar_target(
     edu_table,
     diab_list %>%
       as_survey_design(
@@ -212,10 +270,8 @@ list(
       createTable(., by = "HIDEG_all"),
     pattern = map(diab_list)
   ),
-
-  # Make tables to get additional values from, like sample size and standard error
   tar_target(
-    sex_all_stats,
+    pov_table,
     diab_list %>%
       as_survey_design(
         ids = VARPSU_all,
@@ -223,10 +279,37 @@ list(
         strata = VARSTR_all,
         nest = TRUE
       ) %>%
-      createTableAllStats(., by = "SEX", diab_list) %>%
-      makeTablesLonger(),
+      createTable(., by = "POVCAT_all"),
     pattern = map(diab_list)
   ),
+  tar_target(
+    region_table,
+    diab_list %>%
+      filter(!is.na(DIABW)) %>%
+      as_survey_design(
+        ids = VARPSU_all,
+        weights = DIABW,
+        strata = VARSTR_all,
+        nest = TRUE
+      ) %>%
+      createTable(., by = "REGION_all"),
+    pattern = map(diab_list)
+  ),
+  tar_target(
+    ins_table,
+    diab_list %>%
+      as_survey_design(
+        ids = VARPSU_all,
+        weights = DIABW,
+        strata = VARSTR_all,
+        nest = TRUE
+      ) %>%
+      createTable(., by = "INSCOV_all"),
+    pattern = map(diab_list)
+  ),
+  # Make tables to get proportions and other relevant stats, then age adjust the proportions
+
+# Age adjusted stats ------------------------------------------------------
   tar_target(
     yearly_table_all_stats,
     diab_list %>%
@@ -241,6 +324,55 @@ list(
     pattern = map(diab_list)
   ),
   tar_target(
+    overall_age_adjusted,
+    diab_list %>%
+      as_survey_design(
+        ids = VARPSU_all,
+        weights = DIABW,
+        strata = VARSTR_all,
+        nest = TRUE
+      ) %>%
+      createTableAllStatsbyAge(., by = NULL, diab_list) %>%
+      makeTablesLongerbyAge() %>%
+      ageAdjustTables(),
+    pattern = map(diab_list)
+  ),
+  tar_target(
+    overall_stats_joined,
+    left_join(select(yearly_table_all_stats, -strata),
+              overall_age_adjusted, by = c('variable', 'label', 'year'))
+  ),
+  tar_target(
+    sex_all_stats,
+    diab_list %>%
+      as_survey_design(
+        ids = VARPSU_all,
+        weights = DIABW,
+        strata = VARSTR_all,
+        nest = TRUE
+      ) %>%
+      createTableAllStats(., by = "SEX", diab_list) %>%
+      makeTablesLonger(),
+    pattern = map(diab_list)
+  ),
+  tar_target(
+    sex_age_adjusted,
+    diab_list %>%
+      as_survey_design(
+        ids = VARPSU_all,
+        weights = DIABW,
+        strata = VARSTR_all,
+        nest = TRUE
+      ) %>%
+      createTableAllStatsbyAge(., by = "SEX", diab_list) %>%
+      makeTablesLongerbyAge() %>%
+      ageAdjustTables(),
+    pattern = map(diab_list)
+    ),
+  tar_target(sex_stats_joined,
+             left_join(sex_all_stats, sex_age_adjusted, by = c('variable', 'label', 'strata', 'year'))),
+
+  tar_target(
     race_all_stats,
     diab_list %>%
       as_survey_design(
@@ -254,6 +386,22 @@ list(
     pattern = map(diab_list)
   ),
   tar_target(
+    race_age_adjusted,
+    diab_list %>%
+      as_survey_design(
+        ids = VARPSU_all,
+        weights = DIABW,
+        strata = VARSTR_all,
+        nest = TRUE
+      ) %>%
+      createTableAllStatsbyAge(., by = "RACE_all", diab_list) %>%
+      makeTablesLongerbyAge() %>%
+      ageAdjustTables(),
+    pattern = map(diab_list)
+  ),
+  tar_target(race_stats_joined,
+             left_join(race_all_stats, race_age_adjusted, by = c('variable', 'label', 'strata', 'year'))),
+  tar_target(
     edu_all_stats,
     diab_list %>%
       as_survey_design(
@@ -266,6 +414,153 @@ list(
       makeTablesLonger(),
     pattern = map(diab_list)
   ),
+  tar_target(
+    edu_age_adjusted,
+    diab_list %>%
+      as_survey_design(
+        ids = VARPSU_all,
+        weights = DIABW,
+        strata = VARSTR_all,
+        nest = TRUE
+      ) %>%
+      createTableAllStatsbyAge(., by = "HIDEG_all", diab_list) %>%
+      makeTablesLongerbyAge() %>%
+      ageAdjustTables(),
+    pattern = map(diab_list)
+  ),
+  tar_target(edu_stats_joined,
+             left_join(edu_all_stats, edu_age_adjusted, by = c('variable', 'label', 'strata', 'year'))),
+  tar_target(
+    age_all_stats,
+    diab_list %>%
+      as_survey_design(
+        ids = VARPSU_all,
+        weights = DIABW,
+        strata = VARSTR_all,
+        nest = TRUE
+      ) %>%
+      createTableAllStats(., by = "AGE_all", diab_list) %>%
+      makeTablesLonger(),
+    pattern = map(diab_list)
+  ),
+  tar_target(
+    pov_all_stats,
+    diab_list %>%
+      as_survey_design(
+        ids = VARPSU_all,
+        weights = DIABW,
+        strata = VARSTR_all,
+        nest = TRUE
+      ) %>%
+      createTableAllStats(., by = "POVCAT_all", diab_list) %>%
+      makeTablesLonger(),
+    pattern = map(diab_list)
+  ),
+  tar_target(
+    pov_age_adjusted,
+    diab_list %>%
+      as_survey_design(
+        ids = VARPSU_all,
+        weights = DIABW,
+        strata = VARSTR_all,
+        nest = TRUE
+      ) %>%
+      createTableAllStatsbyAge(., by = "POVCAT_all", diab_list) %>%
+      makeTablesLongerbyAge() %>%
+      ageAdjustTables(),
+    pattern = map(diab_list)
+  ),
+  tar_target(pov_stats_joined,
+             left_join(pov_all_stats, pov_age_adjusted, by = c('variable', 'label', 'strata', 'year'))),
+  tar_target(
+    ins_all_stats,
+    diab_list %>%
+      as_survey_design(
+        ids = VARPSU_all,
+        weights = DIABW,
+        strata = VARSTR_all,
+        nest = TRUE
+      ) %>%
+      createTableAllStats(., by = "INSCOV_all", diab_list) %>%
+      makeTablesLonger(),
+    pattern = map(diab_list)
+  ),
+  tar_target(
+    ins_age_adjusted,
+    diab_list %>%
+      as_survey_design(
+        ids = VARPSU_all,
+        weights = DIABW,
+        strata = VARSTR_all,
+        nest = TRUE
+      ) %>%
+      createTableAllStatsbyAge(., by = "INSCOV_all", diab_list) %>%
+      makeTablesLongerbyAge() %>%
+      ageAdjustTables(),
+    pattern = map(diab_list)
+  ),
+  tar_target(ins_stats_joined,
+             left_join(ins_all_stats, ins_age_adjusted, by = c('variable', 'label', 'strata', 'year'))),
+  tar_target(
+    stats_tables_combined,
+    bind_rows(
+      list(
+        overall = yearly_table_all_stats,
+        age = age_all_stats,
+        edu = edu_all_stats,
+        race = race_all_stats,
+        sex = sex_all_stats,
+        insurance = ins_all_stats,
+        poverty = pov_all_stats
+      ),
+      .id = 'stratifier'
+    )
+  ),
+# This is the final table of age adjusted statistics
+  tar_target(
+    age_adjusted_stats,
+    bind_rows(
+      list(
+        overall = overall_stats_joined,
+        age = age_all_stats,
+        edu = edu_stats_joined,
+        race = race_stats_joined,
+        sex = sex_stats_joined,
+        insurance = ins_stats_joined,
+        poverty = pov_stats_joined
+      ),
+      .id = 'stratifier'
+    ) %>%
+      filter(label %in% c(
+        'Within last year',
+        '2 or more A1C tests in a year',
+        '1 or more foot examinations in a year',
+        'Once a year',
+        'YES',
+        'Once a year or more'
+      )
+      ) %>%
+      filter(strata %!in% c('Not available', 'Other Race/Not Hispanic')) %>%
+      mutate(age_adjusted_prop = case_when(stratifier == 'age' ~ p / 100,
+                                        TRUE ~ age_adjusted_prop))
+  ),
+  tar_target(
+    stats_table,
+    stats_tables_combined %>%
+      dplyr::filter(label %in% c(
+                      'Within last year',
+                      '2 or more A1C tests in a year',
+                      '1 or more foot examinations in a year',
+                      'Once a year',
+                      'YES',
+                      'Once a year or more'
+                      )
+                    )
+  ),
+
+# Some other tables? ------------------------------------------------------
+
+
   tar_target(
     overall_joined,
     joinTables(overall_indicator, yearly_table_all_stats)
@@ -282,7 +577,15 @@ list(
     edu_joined,
     joinTables(edu_indicator, edu_all_stats, variable = 'edu')
   ),
+  # tar_target(
+  #   age_joined,
+  #   joinTables(age_indicator, age_all_stats, variable = 'age')
+  # ),
   tar_target(
+
+# Check suppression -------------------------------------------------------
+
+
     overall_suppressed,
     suppressData(overall_joined)
   ),
@@ -307,7 +610,7 @@ list(
   tar_target(edu_trend_suppressed,
              plotTrends(edu_suppressed, strata = 'HIDEG_all')),
   tar_target(overall_focus,
-             overall_suppressed%>%
+             overall_suppressed %>%
                dplyr::filter(variable %in% c('a1c', 'eye-exam', 'flu', 'foot'),
                              value %in% c(
                                'Within last year',
@@ -337,7 +640,7 @@ list(
                                'YES'
                              ))),
   tar_target(edu_focus,
-             edu_suppressed%>%
+             edu_suppressed %>%
                dplyr::filter(variable %in% c('a1c', 'eye-exam', 'flu', 'foot'),
                              value %in% c(
                                'Within last year',
@@ -345,5 +648,125 @@ list(
                                '1 or more foot examinations in a year',
                                'Once a year',
                                'YES'
-                             )))
+                             ))),
+
+# Age adjust preventive practices ------------------------------------
+  tar_target(
+    overall_preventive,
+    diab_list %>%
+      as_survey_design(
+        ids = VARPSU_all,
+        weights = DIABW,
+        strata = VARSTR_all,
+        nest = TRUE
+      ) %>%
+      preventivePracticebyAge(., by = NULL, diab_list) %>%
+      makePreventiveTablesLongerbyAge() %>%
+      ageAdjustTables(),
+    pattern = map(diab_list)
+  ),
+  tar_target(
+    sex_preventive,
+    diab_list %>%
+      as_survey_design(
+        ids = VARPSU_all,
+        weights = DIABW,
+        strata = VARSTR_all,
+        nest = TRUE
+      ) %>%
+      preventivePracticebyAge(., by = "SEX", diab_list) %>%
+      makePreventiveTablesLongerbyAge() %>%
+      ageAdjustTables(),
+    pattern = map(diab_list)
+  ),
+  tar_target(
+    race_preventive,
+    diab_list %>%
+      as_survey_design(
+        ids = VARPSU_all,
+        weights = DIABW,
+        strata = VARSTR_all,
+        nest = TRUE
+      ) %>%
+      preventivePracticebyAge(., by = "RACE_all", diab_list) %>%
+      makePreventiveTablesLongerbyAge() %>%
+      ageAdjustTables(),
+    pattern = map(diab_list)
+  ),
+  tar_target(
+    edu_preventive,
+    diab_list %>%
+      as_survey_design(
+        ids = VARPSU_all,
+        weights = DIABW,
+        strata = VARSTR_all,
+        nest = TRUE
+      ) %>%
+      preventivePracticebyAge(., by = "HIDEG_all", diab_list) %>%
+      makePreventiveTablesLongerbyAge() %>%
+      ageAdjustTables(),
+    pattern = map(diab_list)
+  ),
+  tar_target(
+    age_preventive,
+    diab_list %>%
+      as_survey_design(
+        ids = VARPSU_all,
+        weights = DIABW,
+        strata = VARSTR_all,
+        nest = TRUE
+      ) %>%
+      preventivePracticebyAge(., by = 'AGE_all', diab_list) %>%
+      makePreventiveTablesLongerbyAge2(),
+    pattern = map(diab_list)
+  ),
+  tar_target(
+    pov_preventive,
+    diab_list %>%
+      as_survey_design(
+        ids = VARPSU_all,
+        weights = DIABW,
+        strata = VARSTR_all,
+        nest = TRUE
+      ) %>%
+      preventivePracticebyAge(., by = "POVCAT_all", diab_list) %>%
+      makePreventiveTablesLongerbyAge() %>%
+      ageAdjustTables(),
+    pattern = map(diab_list)
+  ),
+
+  tar_target(
+    ins_preventive,
+    diab_list %>%
+      as_survey_design(
+        ids = VARPSU_all,
+        weights = DIABW,
+        strata = VARSTR_all,
+        nest = TRUE
+      ) %>%
+      preventivePracticebyAge(., by = "INSCOV_all", diab_list) %>%
+      makePreventiveTablesLongerbyAge() %>%
+      ageAdjustTables(),
+    pattern = map(diab_list)
+  ),
+
+  # This is the final table of age adjusted # oif preventive care statistics
+  tar_target(
+    age_adjusted_preventive,
+    bind_rows(
+      list(
+        overall = overall_preventive,
+        age = age_preventive,
+        edu = edu_preventive,
+        race = race_preventive,
+        sex = sex_preventive,
+        insurance = ins_preventive,
+        poverty = pov_preventive
+      ),
+      .id = 'stratifier'
+    ) %>%
+      mutate(age_adjusted_prop = case_when(stratifier == 'age' ~ p / 100,
+                                           TRUE ~ age_adjusted_prop))
+  )
+
 )

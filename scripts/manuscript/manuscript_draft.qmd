@@ -1,0 +1,249 @@
+---
+title: "Trends in Preventive Care Practices among US Adults with Diabetes, 2008-2020 "
+format: docx
+editor: visual
+bibliography: references.bib
+csl: ama.csl
+---
+```{r}
+library(gtsummary)
+library(tidyverse)
+library(patchwork)
+library(targets)
+library(gt)
+
+```
+
+
+**Trends in Preventive Care Practices among US Adults with Diabetes, 2008-2020**
+
+Jacob T. Wittman, PhD
+Kai M. Bullard
+Stephen R. Benoit
+
+CDC Affiliation
+
+\pagebreak
+
+# Abstract
+
+\pagebreak
+
+# Introduction
+
+- Diabetes affects a lot of people
+  - Kills people, makes them sick, reduces quality of life
+  - Cost of management is high and increasing
+- Advances in diabetes management
+  - Patients with diabetes must actually receive this care
+- Present trends in self-reported receipt of preventive care practices according to MEPS from 2008 - 2020.
+
+Diabetes is a chronic disease that affects XX people in the USA. 
+
+# Methods
+
+## Data Source
+
+We used data from the Medical Expenditure Panel Survey (MEPS) from years 2008 - 2020. Participants in this survey are a subsample of households that participate in the National Health Interview Survey (NHIS). The MEP survey targets the civilian noninstitutionalized population in the US and provides national and regional estimates of health care use, expenditures, sources of payment and health insurance coverage. This survey also contains information on patient demographics, socioeconomics, and via the Diabetes Care Survey (DCS), information on diabetes preventive care practices. The DCS is a self-administered paper-and-pencil questionnaire that is provided to MEPS respondents who indicate that they have been told by a doctor or health professional that they have diabetes. 
+
+The data we used comes from the full-year consolidated file from MEPS for the 12 year time span. Our analysis is adjusted for the complex survey design
+
+# Results
+
+# Discussion
+
+
+
+# References
+
+::: {#refs}
+:::
+
+# Tables
+```{r}
+# tar_load(age_adjusted_stats)
+# age_adjusted_stats %>% 
+#   #filter(stratifier != 'age') %>% 
+#   mutate(age_adjusted_prop = age_adjusted_prop * 100) %>% 
+#   pivot_wider(
+#     id_cols = c(stratifier, variable, var_label, strata),
+#     names_from = year,
+#     values_from = age_adjusted_prop
+#   ) %>% 
+#   group_by(stratifier, strata) %>%
+#   select(stratifier, var_label, `2008`:`2020`) %>%
+#   gt() %>% 
+#   fmt_number(columns = `2008`:`2020`, decimals = 1) %>% 
+#   gtsave('table_one.docx')
+```
+
+```{r}
+tar_load(age_adjusted_preventive)
+age_adjusted_preventive %>% 
+  filter(label == 'Three preventive practices followed') %>% 
+  mutate(age_adjusted_prop = age_adjusted_prop * 100) %>% 
+  pivot_wider(
+    id_cols = c(stratifier, variable, label, strata),
+    names_from = year,
+    values_from = age_adjusted_prop
+  ) %>% 
+  group_by(stratifier, strata) %>%
+  select(stratifier, label, `2008`:`2020`) %>%
+  gt() %>% 
+  fmt_number(columns = `2008`:`2020`, decimals = 1) %>% 
+  gtsave('preventive_practices.docx')
+```
+
+
+# Figures
+
+```{r}
+tar_load(age_adjusted_stats)
+
+stats_table_plot_dat <- age_adjusted_stats %>% 
+  filter(strata != 'Total') %>%
+  filter(strata != 'Not available') %>% 
+  filter(strata != 'Other Race/Not Hispanic') %>% 
+  mutate(variable_text = case_when(variable == 'a1c' ~ '2 or more A1C tests',
+                                   variable == 'CHOL_all' ~ 'Cholesterol tested',
+                                   variable == 'DENT_all' ~ '1 or more dentist visits',
+                                   variable == 'eye-exam' ~ 'Eye exam with dilation',
+                                   variable == 'flu' ~ 'Received flu vaccine',
+                                   variable == 'foot' ~ 'Foot examination'),
+         strata = case_when(strata == 'stat_0' ~ 'Overall',
+                            TRUE ~ strata)) %>% 
+  mutate(strata = as.factor(strata)) %>% 
+  split(., f = .$stratifier)
+
+stats_table_plot_dat <- map(stats_table_plot_dat, function(.x) {
+  .x %>% 
+    mutate(strata = fct_drop(strata))
+})
+
+
+overall_data <- stats_table_plot_dat$overall
+# Remove the overall data from the list
+stats_table_plot_dat <- stats_table_plot_dat[-4]
+# Relevel the poverty factors
+stats_table_plot_dat$poverty$strata <- factor(stats_table_plot_dat$poverty$strata, levels = c('High income', 'Middle income', 'Low income', 'Poor/Negative'))
+test_plots <- stats_table_plot_dat %>% 
+   map(
+    ~ ggplot(filter(.x, variable %in% c('a1c', 'CHOL_all', 'flu')),
+             aes(
+      x = year,
+      y = age_adjusted_prop * 100,
+      group = strata,
+      color = strata
+    )) +
+      #geom_point() +
+      geom_smooth( se = FALSE) +
+      geom_smooth(data = filter(overall_data, variable %in% c('a1c', 'CHOL_all', 'flu')),
+                  aes(x = year, y = age_adjusted_prop * 100),
+                  color = 'black',
+                  se = FALSE,
+                  linetype = 'dashed') +
+      facet_wrap( ~ variable_text, ncol = 3) +
+      theme_classic() +
+      scale_y_continuous(
+        limits = c(00, 100),
+        breaks = seq(0, 100, 25),
+        labels = seq(0, 100, 25)
+      ) +
+      scale_x_continuous(
+        limits = c(2008, 2020),
+        breaks = seq(2008, 2020, 2),
+        labels = seq(2008, 2020, 2)
+      ) +
+      scale_color_brewer(type = 'qual', palette = 'Set2') +
+      theme(axis.text = element_text(color = 'black'),
+            axis.text.x = element_text(angle = 45, hjust = 0.9, vjust = 0.95)) +
+      labs(x = 'Year', y = 'Percentage')
+  )
+
+test_plots[[1]] <- test_plots[[1]] + labs(color = 'Age (grouped)') 
+test_plots[[2]] <- test_plots[[2]] + labs(color = 'Highest degree \nobtained') + theme(strip.background =  element_blank(),
+                                                                          strip.text = element_blank())
+test_plots[[3]] <- test_plots[[3]] + labs(color = "Insurance") + theme(strip.background =  element_blank(),
+                                                                            strip.text = element_blank())
+test_plots[[4]] <- test_plots[[4]] + labs(color = 'Poverty') + theme(strip.background =  element_blank(),
+                                                                            strip.text = element_blank())
+test_plots[[5]] <- test_plots[[5]] + labs(color = 'Race/Ethnicity') + theme(strip.background =  element_blank(),
+                                                                             strip.text = element_blank())
+test_plots[[6]] <- test_plots[[6]] + labs(color = 'Sex') + theme(strip.background =  element_blank(),
+                                                                          strip.text = element_blank())
+test_plots <- list(
+  test_plots[[1]],
+  test_plots[[6]],
+  test_plots[[5]],
+  test_plots[[2]],
+  test_plots[[3]],
+  test_plots[[4]]
+)
+
+exam_plots <- stats_table_plot_dat %>% 
+   map(
+    ~ ggplot(filter(.x, variable %!in% c('a1c', 'CHOL_all', 'flu')),
+             aes(
+      x = year,
+      y = age_adjusted_prop * 100,
+      group = strata,
+      color = strata
+    )) +
+      #geom_point() +
+      geom_smooth(se = FALSE) +
+      geom_smooth(data = filter(overall_data, variable %!in% c('a1c', 'CHOL_all', 'flu')),
+                  aes(x = year, y = age_adjusted_prop * 100),
+                  color = 'black',
+                  se = FALSE,
+                  linetype = 'dashed') +
+      facet_wrap( ~ variable_text, ncol = 3) +
+      theme_classic() +
+      scale_y_continuous(
+        limits = c(  0, 100),
+        breaks = seq(0, 100, 25),
+        labels = seq(0, 100, 25)
+      ) +
+      scale_x_continuous(
+        limits = c(2008, 2020),
+        breaks = seq(2008, 2020, 2),
+        labels = seq(2008, 2020, 2)
+      ) +
+      scale_color_brewer(type = 'qual', palette = 'Set2') +
+      theme(axis.text = element_text(color = 'black'),
+            axis.text.x = element_text(angle = 45, hjust = 0.9, vjust = 0.95)) +
+      labs(x = 'Year', y = 'Percentage')
+  )
+
+exam_plots[[1]] <- exam_plots[[1]] + labs(color = 'Age (grouped)')
+exam_plots[[2]] <- exam_plots[[2]] + labs(color = 'Highest degree \nobtained') + theme(strip.background =  element_blank(),
+                                                                          strip.text = element_blank())
+exam_plots[[3]] <- exam_plots[[3]] + labs(color = "Insurance") + theme(strip.background =  element_blank(),
+                                                                            strip.text = element_blank())
+exam_plots[[4]] <- exam_plots[[4]] + labs(color = 'Poverty') + theme(strip.background =  element_blank(),
+                                                                            strip.text = element_blank())
+exam_plots[[5]] <- exam_plots[[5]] + labs(color = 'Race/Ethnicity') + theme(strip.background =  element_blank(),
+                                                                             strip.text = element_blank())
+exam_plots[[6]] <- exam_plots[[6]] + labs(color = 'Sex') + theme(strip.background =  element_blank(),
+                                                                          strip.text = element_blank())
+exam_plots <- list(
+  exam_plots[[1]],
+  exam_plots[[6]],
+  exam_plots[[5]],
+  exam_plots[[2]],
+  exam_plots[[3]],
+  exam_plots[[4]]
+)
+(all_exam_plots <- exam_plots %>% 
+  wrap_plots(nrow = 6) &
+  theme(plot.margin = margin(0.5, 0.5, 0.5, 0.5, 'pt')))
+(all_test_plots <- test_plots %>% 
+  wrap_plots(nrow = 6) &
+  theme(plot.margin = margin(0.5, 0.5, 0.5, 0.5, 'pt')))
+ggsave(plot = all_exam_plots,
+       filename = 'figures/all_exam_plots.tiff',
+       dpi = 200)
+ggsave(plot = all_test_plots,
+       filename = 'figures/all_test_plots.tiff',
+       dpi = 200)
+```
+

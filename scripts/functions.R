@@ -1,6 +1,7 @@
 
 library(tidyverse)
 library(haven)
+`%!in%` <- Negate(`%in%`)
 
 # Read in data
 readAndSelect <- function(data_path, data_year) {
@@ -29,23 +30,22 @@ readAndSelect <- function(data_path, data_year) {
   }
 
   temp %>%
+    lazy_dt() %>%
     mutate(across(starts_with('RACE'), ~as.factor(.x))) %>%
     select(starts_with('DOB'),
            starts_with('DUPERSID'),
-           starts_with('USBORN'),
-           starts_with('BORN'), # Two different born in USA variables used in different years
            starts_with('AGE'),
            starts_with('RACE'),
            starts_with('SEX'),
            starts_with('VARPSU'), # PSU
            starts_with('VARSTR'), # Strata
-           # starts_with('INSCOV'), # Insurance coverage variable
+           starts_with('INSCOV'), # Insurance coverage variable
            starts_with('HIDEG'), # Highest degree - want only HIDEGYR and HIDEG
            starts_with('EDUYRDG'), #
            starts_with('TTLP'), # Total income
            starts_with('POVCAT'), # Categorical poverty status
            #starts_with('POVLEV'), # Continuous poverty status
-           #starts_with('REGION'),
+           starts_with('REGION'),
            starts_with('DENTCK53'), # Dental checkup, only 2000 - 2016,
            matches('DVTOT[0-9]{2}'), # # of dental care visits in YYYY
            starts_with('CHOLCK'), # Cholesterol check, only 2000 - 2016,
@@ -60,14 +60,20 @@ readAndSelect <- function(data_path, data_year) {
            starts_with('DSEYE53'), # Have to get the 2001 eye check variable too
            starts_with('DSA1'), # A1C test,
            starts_with('DSCKFT'), # Feet check, only 2001 - 2007
+           starts_with('DSDIA'), # Diagnosed with diabetes by a physician
+           starts_with('DIABDX'), # Diabetes diagnosis
            -starts_with('DSEB'), # Remove the eye test in year before columns
            -contains('AGE31X'),
            -contains('AGE42X'),
            -contains('AGE53x'), # Remove some of the extra age variables
            -contains('DSFLNV'), # Remove the never had flu shot
+           -contains('REGION31'), # Remove excess region variables
+           -contains('REGION42'),
+           -contains('REGION53'),
            starts_with('PERWT'), # Person weight level. Not sure I need this, since just working with DCS variables
            starts_with('INSCOP') # Inscope, again not sure if needed but putting here anyway for now
-    )
+    ) %>%
+    as_tibble()
 }
 
 # Clean the data
@@ -120,11 +126,13 @@ cleanMepsData <- function(dat) {
           EDUYRDG,
           RACEX,
           RACETHNX,
-          USBORN42
         ),
         ~ as.factor(.x)
       )
-    )
+    ) %>%
+    # NEed to coalesce DVTOT variables before cleaning
+    mutate(all_DVTOT = coalesce(!!!select(., num_range('DVTOT', 17:20)))) %>%
+    select(-starts_with('DVTOT'))
 
 
 
@@ -146,6 +154,31 @@ cleanMepsData <- function(dat) {
         )
       ),
       across(
+        starts_with('POVCAT'),
+        ~ recode_factor(
+          .x,
+          `1` = 'Poor/Negative',
+          `2` = 'Near poor',
+          `3` = 'Low income',
+          `4` = 'Middle income',
+          `5` = 'High income'
+        ) %>%
+          fct_collapse(
+            `Low income` = c('Low income', 'Near poor')
+          )
+      ),
+      across(
+        starts_with('REGION'),
+        ~ recode_factor(
+          .x,
+          `-1` = 'Inapplicable',
+          `1` = 'Northeast',
+          `2` = 'Midwest',
+          `3` = 'South',
+          `4` = 'West'
+        )
+      ),
+      across(
         intersect(starts_with('DSCH'),
                   ends_with('53')),
         ~ recode_factor(
@@ -157,6 +190,15 @@ cleanMepsData <- function(dat) {
           `-1` = 'Inapplicable',
           `1` = 'Within last year',
           `2` = 'NO'
+        )
+      ),
+      across(
+        starts_with('INSCOV'),
+        ~ recode_factor(
+          .x,
+          `1` = 'Any private',
+          `2` = 'Public only',
+          `3` = 'Uninsured'
         )
       ),
       across(
@@ -188,10 +230,25 @@ cleanMepsData <- function(dat) {
         )
       ),
       across(
-        starts_with('DVTOT'),
+        starts_with('DIABDX'),
+        ~ recode_factor(
+          .x,
+          `-15` = 'Cannot be computed',
+          `-9` = 'Not ascertained',
+          `-8` = 'Do not know',
+          `-7` = 'Refused',
+          `-1` = 'Inapplicable',
+          `1` = 'YES',
+          `2` = 'NO'
+        )
+      ),
+      across(
+        ends_with('DVTOT'),
         ~ as.factor(case_when(.x >= 1 ~ 1,
-                              TRUE ~ 0)) %>%
-          recode_factor(`1` = 'Once a year',
+                              .x == 0 ~ 0,
+                              TRUE ~ -9)) %>%
+          recode_factor(`-9` = 'Not ascertained',
+                        `1` = 'Once a year or more',
                         `0` = 'Less than once a year')
       ),
       across(
@@ -275,26 +332,26 @@ cleanMepsData <- function(dat) {
         `4` = 'Asian/Not Hispanic',
         `5` = 'Other Race/Not Hispanic',
       ),
-      USBORN42 = recode_factor(
-        USBORN42,
-        `-15` = 'Cannot be computed',
-        `-9` = 'Not ascertained',
-        `-8` = 'Do not know',
-        `-7` = 'Refused',
-        `-1` = 'Inapplicable',
-        `1` = 'Yes',
-        `2` = 'No'
-      ),
-      BORNUSA = recode_factor(
-        BORNUSA,
-        `-15` = 'Cannot be computed',
-        `-9` = 'Not ascertained',
-        `-8` = 'Do not know',
-        `-7` = 'Refused',
-        `-1` = 'Inapplicable',
-        `1` = 'Yes',
-        `2` = 'No'
-      ),
+      # USBORN42 = recode_factor(
+      #   USBORN42,
+      #   `-15` = 'Cannot be computed',
+      #   `-9` = 'Not ascertained',
+      #   `-8` = 'Do not know',
+      #   `-7` = 'Refused',
+      #   `-1` = 'Inapplicable',
+      #   `1` = 'Yes',
+      #   `2` = 'No'
+      # ),
+      # BORNUSA = recode_factor(
+      #   BORNUSA,
+      #   `-15` = 'Cannot be computed',
+      #   `-9` = 'Not ascertained',
+      #   `-8` = 'Do not know',
+      #   `-7` = 'Refused',
+      #   `-1` = 'Inapplicable',
+      #   `1` = 'Yes',
+      #   `2` = 'No'
+      # ),
       across(
         c(CHOLCK53, CHECK53, FLUSHT53),
         ~ recode_factor(
@@ -338,7 +395,17 @@ cleanMepsData <- function(dat) {
         `2` = 'Once a year',
         `3` = 'Less than once a year',
         `4` = 'Never go to dentist'
-      ),
+      ) %>%
+        fct_collapse(
+          `Once a year or more` = c(
+            'Once a year',
+            'Twice a year or more'
+          ),
+          `Less than once a year` = c(
+            'Less than once a year',
+            'Never go to dentist'
+          )
+        ),
       SEX = recode_factor(SEX,
                           `1` = 'Male',
                           `2` = 'Female')
@@ -361,30 +428,37 @@ coalesceData <- function(dat) {
     mutate(
       DSEY_all = coalesce(!!!select(., starts_with('DSEY'))),
       HIDEG_all = coalesce(!!!select(., starts_with('HIDEG'), starts_with('EDUY'))),
+      DIABDX_all = coalesce(!!!select(., starts_with('DIABDX'))),
       DIABW = coalesce(!!!select(., starts_with('DIABW'))),
+      PERWT = coalesce(!!!select(., starts_with('PERWT'))),
       POVCAT_all = coalesce(!!!select(., starts_with('POVCAT'))),
-      USBORN_all = coalesce(!!!select(., contains('BORN'))),
+      INSCOV_all = coalesce(!!!select(., starts_with('INSCOV'))),
+      REGION_all = coalesce(!!!select(., starts_with('REGION'))),
       VARPSU_all = coalesce(!!!select(., starts_with('VARPSU'))),
       VARSTR_all = coalesce(!!!select(., starts_with('VARSTR'))),
       AGE_all = coalesce(!!!select(., starts_with('AGE'))),
       RACE_all = coalesce(!!!select(., RACETHNX, RACETHX)),
       CHOL_all = coalesce(!!!select(., CHOLCK53, starts_with('DSCH'))),
       FLU_all = coalesce(!!!select(., FLUSHT53, starts_with('DSFL'))),
-      DENT_all = coalesce(!!!select(., DENTCK53, num_range('DVTOT', 17:20))),
+      DENT_all = coalesce(!!!select(., DENTCK53, ends_with('DVTOT'))),
       FEET_all = coalesce(!!!select(., DSCKFT53, starts_with('DSFT'))),
 
     ) %>%
     mutate(
       AGE_all = as.factor(case_when(
         AGE_all == -1 ~ NA_character_,
-        AGE_all < 18 & AGE_all > -1 ~ NA_character_,
+        AGE_all < 18 & AGE_all > -1 ~ 'Less than 18',
         AGE_all >= 18 & AGE_all <= 44 ~ '18 to 44',
         AGE_all >= 45 & AGE_all <= 64 ~ '45 to 64',
         AGE_all >= 65 & AGE_all <= 74 ~ '65 to 74',
         AGE_all >= 75 ~ '75+',
         TRUE ~ as.character(AGE_all)
       ))
-    )
+    ) %>%
+    filter(AGE_all != 'Less than 18') %>% # Need to drop this factor level, throwing errors
+    filter(REGION_all != 'Inapplicable') %>%
+    mutate(AGE_all = forcats::fct_drop(AGE_all),
+           REGION_all = forcats::fct_drop(REGION_all))
 }
 
 relevelFactors <- function(dat) {
@@ -393,11 +467,15 @@ relevelFactors <- function(dat) {
            FEET_all = fct_relevel(FEET_all, 'YES', 'NO', 'Not ascertained', 'Do not know', 'Inapplicable', 'Cannot be computed'),
            CHOL_all = fct_relevel(CHOL_all, 'Within last year', 'Within last 2 or more years', 'NO', 'Not ascertained', 'Do not know', 'Inapplicable', 'Cannot be computed'),
            FLU_all = fct_relevel(FLU_all, 'Within last year', 'Within last 2 or more years', 'NO', 'Not ascertained', 'Do not know', 'Refused', 'Inapplicable', 'Cannot be computed'),
-           DENT_all = fct_relevel(DENT_all, 'Twice a year or more', 'Once a year', 'Less than once a year', 'Never go to dentist', 'Not ascertained', 'Do not know', 'Refused', 'Inapplicable'),
+           DENT_all = fct_relevel(DENT_all, 'Once a year or more', 'Less than once a year', 'Not ascertained', 'Do not know', 'Refused', 'Inapplicable'),
            DSA1C53 = fct_relevel(DSA1C53, '2 or more A1C tests in a year', 'Less than 2 or more A1C tests in a year', 'Not ascertained', 'Do not know', 'Inapplicable', 'Cannot be computed'),
-           )
+           POVCAT_all = fct_relevel(POVCAT_all, 'High income', 'Middle income', 'Low income', 'Poor/Negative')
+           ) %>%
+    as_tibble()
 }
 
+# This function calculates proportion of individuals following prventive
+# care practices in each year and for the different strata.
 calcProp <- function(data, year, variable = NULL) {
   if (is.character(variable)) {
     vari <- enquo(variable)
@@ -414,7 +492,7 @@ calcProp <- function(data, year, variable = NULL) {
     df <- npsu - nstrata
     diab_svy %>%
       tab_survey(
-         FLU_all, DSA1C53, DSEY_all, FEET_all, #CHECK53, CHOL_all, DENT_all
+         FLU_all, DSA1C53, DSEY_all, FEET_all, CHOL_all, DENT_all,
         pretty = FALSE,
         strata = !!vari,
         wide = FALSE,
@@ -447,7 +525,7 @@ calcProp <- function(data, year, variable = NULL) {
     df <- npsu - nstrata
     diab_svy %>%
       tab_survey(
-        FLU_all, DSA1C53, DSEY_all, FEET_all, #CHECK53, CHOL_all, DENT_all
+        FLU_all, DSA1C53, DSEY_all, FEET_all, CHOL_all, DENT_all,
         pretty = FALSE,
         strata = vari,
         wide = FALSE,
@@ -556,6 +634,30 @@ combineEdu <- function(meps_data, dash_data) {
     )
 }
 
+combineAge <- function(meps_data, dash_data) {
+  age_indicator <- meps_data %>%
+    mutate(
+      variable = case_when(
+        variable == 'FLU_all' ~ 'flu',
+        variable == 'DSEY_all' ~ 'eye-exam',
+        variable == 'DSA1C53' ~ 'a1c',
+        variable == 'FEET_all' ~ 'foot',
+        TRUE ~ variable
+      ),
+      HIDEG_all = case_when(
+        HIDEG_all == 'Greater than HS' ~ 'greater-than-HS',
+        HIDEG_all == 'Less than high school' ~ 'less-than-HS',
+        HIDEG_all == 'High school' ~ 'HS',
+        TRUE ~ as.character(HIDEG_all)
+      )
+    ) %>%
+    left_join(
+      .,
+      dplyr::filter(dash_data, stratifier == 'edu'),
+      by = c('year', 'variable' = 'indicator', 'HIDEG_all' = 'strata')
+    )
+}
+
 plotTrends <- function(data, strata) {
   if (is.null(strata) == TRUE) {
     data %>%
@@ -618,7 +720,7 @@ plotTrends <- function(data, strata) {
 }
 
 createTable <- function(survey.object, by = NULL) {
-    tbl_svysummary(
+   out <- tbl_svysummary(
       survey.object,
       by = by,
       include = c(CHOL_all,
@@ -634,7 +736,7 @@ createTable <- function(survey.object, by = NULL) {
                    DSA1C53 ~ '2 or more A1C tests in the last year',
                    FEET_all ~ 'Foot checked')
     )
-
+  out$table_body
 }
 
 createTableAllStats <- function(survey.object, by = NULL, data) {
@@ -675,6 +777,57 @@ createTableAllStats <- function(survey.object, by = NULL, data) {
 
 }
 
+createTableAllStatsbyAge <- function(survey.object, by = NULL, data) {
+  out_table <- tbl_strata(
+    survey.object,
+    strata = AGE_all,
+    .tbl_fun =
+      ~.x %>%
+      tbl_svysummary(
+        by = by,
+        digits = list(everything() ~ 12),
+        include = c(CHOL_all,
+                    FLU_all,
+                    DENT_all,
+                    DSA1C53,
+                    DSEY_all,
+                    FEET_all),
+        label = list(
+          DSEY_all ~ 'Dilated eye exam in the last year',
+          CHOL_all ~ 'Cholesterol tested',
+          FLU_all ~ 'Flu shot',
+          DENT_all ~ '2 or more dentist visits in the last year',
+          DSA1C53 ~ '2 or more A1C tests in the last year',
+          FEET_all ~ 'Foot checked'
+        ),
+        statistic = list(
+          all_categorical() ~ "{n}-{N}-{p}-{p.std.error}-{n_unweighted}-{N_unweighted}-{p_unweighted}"
+        )
+      )
+  )
+
+  out_table$table_body <- out_table$table_body %>%
+    mutate(
+      year = data$year[1],
+      variable = case_when(
+        variable == 'FLU_all' ~ 'flu',
+        variable == 'DSEY_all' ~ 'eye-exam',
+        variable == 'DSA1C53' ~ 'a1c',
+        variable == 'FEET_all' ~ 'foot',
+        TRUE ~ variable
+      )
+    )
+  if (is.null(by) == FALSE) {
+    names(out_table$table_body)[str_detect(names(out_table$table_body), pattern = 'stat')] <-
+      paste(levels(data[[by]]), rep(c('18-44', '45-64', '65-74', '75+'), each = length(levels(data[[by]]))), sep = "_")
+  } else {
+    names(out_table$table_body)[str_detect(names(out_table$table_body), pattern = 'stat')] <-
+      paste("stat_0", rep(c('18-44', '45-64', '65-74', '75+'), each = 1), sep = "_")
+  }
+  return(out_table$table_body)
+
+}
+
 makeTablesLonger <- function(table) {
   col_names <- c('n', 'N', 'p', 'p.std.error', 'n_unweighted', 'N_unweighted', 'p_unweighted')
   table %>%
@@ -686,6 +839,30 @@ makeTablesLonger <- function(table) {
     mutate(across(n:p_unweighted, ~as.numeric(gsub(",", "", .x))))
 
 }
+
+makeTablesLongerbyAge <- function(table) {
+  col_names <- c('n', 'N', 'p', 'p.std.error', 'n_unweighted', 'N_unweighted', 'p_unweighted')
+  table %>%
+    filter(row_type != 'label') %>%
+    pivot_longer(cols = -c(variable, starts_with('var_type'), var_label, row_type, label, year),
+                 names_to = c("strata", 'age'),
+                 names_pattern = '(.*)_(.*)',
+                 values_to = 'parameters') %>%
+    separate(parameters, into = col_names, sep = "-") %>%
+    mutate(across(n:p_unweighted, ~as.numeric(gsub(",", "", .x))))
+
+}
+
+ageAdjustTables <- function(data) {
+  age_prop_table <- tibble(age = c('18-44', '45-64', '65-74', '75+'),
+                           age_prop = c(0.530535, 0.299194, 0.088967, 0.081304))
+  data %>%
+    left_join(age_prop_table, by = 'age') %>%
+    mutate(age_adjusted_prop = (p / 100) * age_prop) %>%
+    group_by(variable, label, strata, year) %>%
+    summarise(age_adjusted_prop = sum(age_adjusted_prop, na.rm = TRUE))
+}
+
 # Need to join the estimates from tbl_svysummary to the rest of the
 # estimates for all the relevant parameters for determining suppression.
 joinTables <- function(indicator_table, suppression_table, variable = NULL) {
@@ -790,4 +967,163 @@ suppressData <- function(data) {
       TRUE ~ proportion
     )
   )
+}
+
+cumulativePractices <- function(data) {
+  data %>%
+    # Create columns that binary indicate if each individual met the appropriate practice (1) or not (0)
+    mutate(chol_bin = case_when(CHOL_all == 'Within last year' ~ 1, TRUE ~ 0),
+           a1c_bin = case_when(DSA1C53 == '2 or more A1C tests in a year' ~ 1, TRUE ~ 0),
+           eye_bin = case_when(DSEY_all == 'YES' ~ 1, TRUE ~ 0),
+           feet_bin = case_when(FEET_all == 'YES' ~ 1, TRUE ~ 0),
+           dent_bin = case_when(DENT_all == 'Once a year or more' ~ 1, TRUE ~ 0),
+           flu_bin = case_when(FLU_all == 'Within last year' ~ 1, TRUE ~ 0)
+           ) %>%
+    rowwise() %>%
+    mutate(sum_practices = sum(c_across(ends_with('bin')))) %>%
+    ungroup() %>%
+    mutate(zero_practices = case_when(sum_practices == 0 ~ 1, TRUE ~ 0),
+           one_practices = case_when(sum_practices == 1 ~ 1, TRUE ~ 0),
+           two_practices = case_when(sum_practices == 2 ~ 1, TRUE ~ 0),
+           three_practices = case_when(sum_practices == 3 ~ 1, TRUE ~ 0),
+           four_practices = case_when(sum_practices == 4 ~ 1, TRUE ~ 0),
+           five_practices = case_when(sum_practices == 5 ~ 1, TRUE ~ 0),
+           six_practices = case_when(sum_practices == 6 ~ 1, TRUE ~ 0),
+           atleast_one_practices = case_when(sum_practices >= 1 ~ 1, TRUE ~ 0),
+           atleast_two_practices = case_when(sum_practices >= 2 ~ 1, TRUE ~ 0),
+           atleast_three_practices = case_when(sum_practices >= 3 ~ 1, TRUE ~ 0),
+           atleast_four_practices = case_when(sum_practices >= 4 ~ 1, TRUE ~ 0),
+           atleast_five_practices = case_when(sum_practices >= 5 ~ 1, TRUE ~ 0),
+           atleast_six_practices = case_when(sum_practices >= 6 ~ 1, TRUE ~ 0)) %>%
+    select(-ends_with('bin'))
+}
+
+preventivePracticebyAge <- function(survey.object, by = NULL, data) {
+  if (is.null(by) || by != 'AGE_all'){
+  out_table <- tbl_strata(
+    survey.object,
+    strata = AGE_all,
+    .tbl_fun =
+      ~.x %>%
+      tbl_svysummary(
+        by = by,
+        digits = list(everything() ~ 12),
+        include = c(
+          #zero_practices,
+          #one_practices,
+          #two_practices,
+          three_practices,
+          #four_practices,
+          #five_practices,
+          #six_practices,
+          #atleast_one_practices,
+          #atleast_two_practices,
+          atleast_three_practices
+          #atleast_four_practices,
+          #atleast_five_practices,
+          #atleast_six_practices
+        ),
+        label = list(
+          #zero_practices ~ "No preventive practices followed",
+          #one_practices ~ "One preventive practice followed",
+          #two_practices ~ "Two preventive practices followed",
+          three_practices ~ "Three preventive practices followed",
+          #four_practices ~ "Four preventive practices followed",
+          #five_practices ~ "Five preventive practices followed",
+          #six_practices ~ "Six preventive practices followed",
+          #atleast_one_practices ~ "At least one preventive practice followed",
+          #atleast_two_practices ~ "At least two preventive practices followed",
+          atleast_three_practices ~ "At least three preventive practices followed"
+          #atleast_four_practices ~ "At least four preventive practices followed",
+          #atleast_five_practices ~ "At least five preventive practices followed",
+          #atleast_six_practices ~ "At least six preventive practices followed"
+        ),
+        statistic = list(
+          all_categorical() ~ "{n}-{N}-{p}-{p.std.error}-{n_unweighted}-{N_unweighted}-{p_unweighted}"
+        )
+      )
+  )
+
+  out_table$table_body <- out_table$table_body %>%
+    mutate(
+      year = data$year[1]
+    )
+  if (is.null(by) == FALSE) {
+    names(out_table$table_body)[str_detect(names(out_table$table_body), pattern = 'stat')] <-
+      paste(levels(data[[by]]), rep(c('18-44', '45-64', '65-74', '75+'), each = length(levels(data[[by]]))), sep = "_")
+  } else {
+    names(out_table$table_body)[str_detect(names(out_table$table_body), pattern = 'stat')] <-
+      paste("stat_0", rep(c('18-44', '45-64', '65-74', '75+'), each = 1), sep = "_")
+  }
+  return(out_table$table_body)
+  }
+   else {
+    out_table <- tbl_svysummary(
+      survey.object,
+      by = by,
+      digits = list(everything() ~ 12),
+      include = c(
+        #zero_practices,
+        #one_practices,
+        #two_practices,
+        three_practices,
+        #four_practices,
+        #five_practices,
+        #six_practices,
+        #atleast_one_practices,
+        #atleast_two_practices,
+        atleast_three_practices
+        #atleast_four_practices,
+        #atleast_five_practices,
+        #atleast_six_practices
+      ),
+      label = list(
+        #zero_practices ~ "No preventive practices followed",
+        #one_practices ~ "One preventive practice followed",
+        #two_practices ~ "Two preventive practices followed",
+        three_practices ~ "Three preventive practices followed",
+        #four_practices ~ "Four preventive practices followed",
+        #five_practices ~ "Five preventive practices followed",
+        #six_practices ~ "Six preventive practices followed",
+        #atleast_one_practices ~ "At least one preventive practice followed",
+        #atleast_two_practices ~ "At least two preventive practices followed",
+        atleast_three_practices ~ "At least three preventive practices followed"
+        #atleast_four_practices ~ "At least four preventive practices followed",
+        #atleast_five_practices ~ "At least five preventive practices followed",
+        #atleast_six_practices ~ "At least six preventive practices followed"
+      ),
+      statistic = list(all_categorical() ~ "{n}-{N}-{p}-{p.std.error}-{n_unweighted}-{N_unweighted}-{p_unweighted}")
+    )
+    out_table$table_body <- out_table$table_body %>%
+      mutate(
+        year = data$year[1]
+      )
+    if (is.null(by) == FALSE) {
+      names(out_table$table_body)[str_detect(names(out_table$table_body), pattern = 'stat')] <-
+        levels(data[[by]])
+    }
+    return(out_table$table_body)
+  }
+}
+makePreventiveTablesLongerbyAge <- function(table) {
+  col_names <- c('n', 'N', 'p', 'p.std.error', 'n_unweighted', 'N_unweighted', 'p_unweighted')
+  table %>%
+    pivot_longer(cols = -c(variable, starts_with('var_type'), var_label, row_type, label, year),
+                 names_to = c("strata", 'age'),
+                 names_pattern = '(.*)_(.*)',
+                 values_to = 'parameters') %>%
+    separate(parameters, into = col_names, sep = "-") %>%
+    mutate(across(n:p_unweighted, ~as.numeric(gsub(",", "", .x))))
+
+}
+# For making the preventive table longer for age. Too lazy to give it a good name.
+makePreventiveTablesLongerbyAge2 <- function(table) {
+  col_names <- c('n', 'N', 'p', 'p.std.error', 'n_unweighted', 'N_unweighted', 'p_unweighted')
+  table %>%
+    pivot_longer(cols = -c(variable, var_type, var_label, row_type, label, year),
+                 names_to = "strata",
+                 values_to = 'parameters') %>%
+    separate(parameters, into = col_names, sep = "-") %>%
+    mutate(across(n:p_unweighted, ~as.numeric(gsub(",", "", .x))))
+
 }

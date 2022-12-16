@@ -52,8 +52,8 @@ library(srvyr)
 diab_list <- group_split(diab_dat, year)
 diab_all_svy <- diab_dat %>% 
   as_survey_design(ids = VARPSU_all, weights = DIABW, strata = VARSTR_all, nest = TRUE)
-diab_svy <- diab_list[[17]] %>%
-  as_survey_design(ids = VARPSU_all, weights = DIABW, strata = VARSTR_all, nest = TRUE)
+diab_svy <- diab_list[[13]] %>%
+  as_survey_design(ids = VARPSU_all, weights = PERWT, strata = VARSTR_all, nest = TRUE)
 diab_only <- subset(diab_svy, DIABW != 0)
 #svytable(~SEX, design = diab_only)
 #test <-svytable(~CHOLCK53 + USBORN_all, design = diab_only, Ntotal = 100)
@@ -78,23 +78,81 @@ test <- diab_svy %>%
     #FLU_all,
     #DENT_all,
     #DSA1C53,
-    DSEY_all,
+    RACE_all,
+    #DIABDX_all,
+    #DSEY_all,
     #FEET_all,
     pretty = FALSE,
-    strata = 'AGE_all',
+    #strata = 'AGE_all',
     wide = FALSE,
-    statistic = list(DSEY_all ~ "{n}"),
+    #statistic = list(DSEY_all ~ "{n}"),
     method = 'mean',
     #drop = c('Not ascertained', 'DK', 'Refused', 'Inapplicable'),
-    keep = c(
-      'Within last year',
-      '2 or more A1C tests in a year',
-      '1 or more foot examinations in a year',
-      'Once a year',
-      #Dental checkups
-      'YES' # eye exam
-    )
+    # keep = c(
+    #   'Within last year',
+    #   '2 or more A1C tests in a year',
+    #   '1 or more foot examinations in a year',
+    #   'Once a year',
+    #   #Dental checkups
+    #   'YES' # eye exam
+    # )
   )
+set.seed(123)
+test_table <- diab_dat %>% 
+  filter(year %in% 2008:2010) %>% 
+  filter(FLU_all %in% c('Within last year')) %>% 
+  mutate(FLU_all = fct_drop(FLU_all),
+         FLU_all = ifelse(FLU_all == 'Within last year', 'Flu vaccine within last year', FLU_all)) %>% 
+  as_survey_design(ids = VARPSU_all, weights = DIABW, strata = VARSTR_all, nest = TRUE) %>% 
+  select(FLU_all,
+         Race = RACE_all,
+         Education = HIDEG_all,
+         Gender = SEX,
+         Age = AGE_all,
+         Region = REGION_all,
+         Insurance = INSCOV_all,
+         Poverty = POVCAT_all,
+         year) %>%
+  select(order(colnames(.))) %>% 
+  tbl_strata(
+    strata = c(year),
+    ~.x %>%  
+      select(-year) %>% 
+      tbl_svysummary(by = FLU_all,
+                     statistic = list(all_categorical() ~ '{p}%'))
+  ) %>% 
+  modify_header(label = "**Flu vaccine within last year**",
+                all_stat_cols() ~ "")
+
+test_table2 <- diab_dat %>% 
+  #filter(year %in% 2008:2011) %>% 
+  filter(DSA1C53 %in% c('2 or more A1C tests in a year')) %>% 
+  mutate(DSA1C53 = fct_drop(DSA1C53)) %>% 
+  as_survey_design(ids = VARPSU_all, weights = DIABW, strata = VARSTR_all, nest = TRUE) %>% 
+  select(DSA1C53,
+         Race = RACE_all,
+         Education = HIDEG_all,
+         Gender = SEX,
+         Age = AGE_all,
+         Region = REGION_all,
+         Insurance = INSCOV_all,
+         Poverty = POVCAT_all,
+         year) %>%
+  select(order(colnames(.))) %>% 
+  tbl_svysummary(
+    by = DSA1C53
+  )
+  
+  tbl_strata(
+    strata = c(year),
+    ~.x %>%  
+      select(-year) %>% 
+      tbl_svysummary(by = DSA1C53,
+                     statistic = list(all_categorical() ~ '{p}%'))
+  ) %>% 
+  modify_header(label = "**2 or more A1C tests in a year**",
+                all_stat_cols() ~ "")
+
 ```
 
 ```{r}
@@ -373,6 +431,66 @@ edu_indicator %>%
 
 
 ```{r}
+tar_load(contains('focus'))
+dats <- list(overall = overall_focus, edu = edu_focus, race = race_focus, sex = sex_focus, age = age_focus)
+test <- bind_rows(dats, .id = 'stratifying_variable')
+test2 <- test %>%
+  filter(variable != 'DENT_all') %>% 
+  mutate(strata = as.character(coalesce(HIDEG_all, RACE_all, SEX, AGE_all))) %>%
+  select(-HIDEG_all,-RACE_all,-SEX,-AGE_all) %>%
+  mutate(strata = case_when(is.na(strata) ~ 'Overall',
+                            TRUE ~ strata))
 
+
+test3 <-  test2 %>%
+  filter(value %in% c(c(
+                      'Within last year',
+                      '2 or more A1C tests in a year',
+                      '1 or more foot examinations in a year',
+                      'Once a year',
+                      'YES'
+                    ))) %>% 
+  filter(strata != 'Total') %>%
+  filter(strata != 'Not available') %>% 
+  group_split(stratifying_variable) 
+plots <- test3 %>% 
+   map(
+    ~ ggplot(.x, aes(
+      x = year,
+      y = proportion * 100,
+      group = strata,
+      color = strata
+    )) +
+      geom_line() +
+      facet_wrap( ~ variable, ncol = 5) +
+      theme_classic() +
+      scale_y_continuous(
+        limits = c(25, 100),
+        breaks = seq(25, 100, 25),
+        labels = seq(25, 100, 25)
+      ) +
+      scale_x_continuous(
+        limits = c(2008, 2020),
+        breaks = seq(2008, 2020, 2),
+        labels = seq(2008, 2020, 2)
+      ) +
+      theme(axis.text = element_text(color = 'black'),
+            axis.text.x = element_text(angle = 45, hjust = 0.9, vjust = 0.95)) +
+      labs(x = 'Year', y = 'Percentage')
+  )
+plots[[1]] <- plots[[1]] + labs(color = 'Age (grouped)')
+plots[[2]] <- plots[[2]] + labs(color = 'Highest degree \nobtained')
+plots[[3]] <- plots[[3]] + labs(color = "")
+plots[[4]] <- plots[[4]] + labs(color = 'Race/Ethnicity')
+plots[[5]] <- plots[[5]] + labs(color = 'Gender')
+plots <- list(
+  plots[[3]],
+  plots[[1]],
+  plots[[2]],
+  plots[[4]],
+  plots[[5]]
+)
+plots %>% 
+  wrap_plots(nrow = 5)
 ```
 
