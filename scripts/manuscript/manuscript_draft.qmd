@@ -12,6 +12,8 @@ library(patchwork)
 library(targets)
 library(gt)
 
+`%!in%` <- Negate(`%in%`)
+
 ```
 
 
@@ -46,7 +48,7 @@ Diabetes is a chronic disease that affects XX people in the USA.
 
 We used data from the Medical Expenditure Panel Survey (MEPS) from years 2008 - 2020. Participants in this survey are a subsample of households that participate in the National Health Interview Survey (NHIS). The MEP survey targets the civilian noninstitutionalized population in the US and provides national and regional estimates of health care use, expenditures, sources of payment and health insurance coverage. This survey also contains information on patient demographics, socioeconomics, and via the Diabetes Care Survey (DCS), information on diabetes preventive care practices. The DCS is a self-administered paper-and-pencil questionnaire that is provided to MEPS respondents who indicate that they have been told by a doctor or health professional that they have diabetes. 
 
-The data we used comes from the full-year consolidated file from MEPS for the 12 year time span. Our analysis is adjusted for the complex survey design
+The data we used comes from the full-year consolidated file from MEPS for the 12 year time span. Our analysis is adjusted for the complex survey design, including clustering and stratification. 
 
 # Results
 
@@ -79,18 +81,73 @@ The data we used comes from the full-year consolidated file from MEPS for the 12
 
 ```{r}
 tar_load(age_adjusted_preventive)
-age_adjusted_preventive %>% 
-  filter(label == 'Three preventive practices followed') %>% 
+preventive_practice_table <- age_adjusted_preventive %>% 
+  filter(label == 'At least three preventive practices followed') %>% 
   mutate(age_adjusted_prop = age_adjusted_prop * 100) %>% 
   pivot_wider(
     id_cols = c(stratifier, variable, label, strata),
     names_from = year,
     values_from = age_adjusted_prop
   ) %>% 
-  group_by(stratifier, strata) %>%
-  select(stratifier, label, `2008`:`2020`) %>%
+  filter(strata %!in% c('Not available', 'Other Race/Not Hispanic')) %>% 
+  mutate(stratifier = factor(stratifier,
+                             c('overall', 'age', 'sex', 'race', 'edu', 'insurance', 'poverty')),
+         strata = case_when(strata == 'stat_0' ~ '-', 
+                            strata == 'Greater than HS' ~ 'Greater than high school',
+                            TRUE ~ strata)) %>% 
+  mutate(strata = as.factor(strata)) %>% 
+  mutate(stratifier = recode_factor(
+    stratifier,
+    overall = 'Overall',
+    age = 'Age',
+    sex = 'Sex',
+    race = 'Race/Ethnicity',
+    edu = 'Highest degree earned',
+    insurance = 'Insurance coverage',
+    poverty = 'Poverty level'
+  )) %>% 
+  group_by(stratifier) %>%
+  select(stratifier, strata, `2008`:`2020`) %>%
   gt() %>% 
-  fmt_number(columns = `2008`:`2020`, decimals = 1) %>% 
+  fmt_number(columns = `2008`:`2020`, decimals = 1)
+preventive_practice_table$`_data` <- preventive_practice_table$`_data`[c(1:18, 20, 19, 21), ]
+preventive_practice_table %>% 
+  gtsave('preventive_practices.docx')
+```
+
+```{r}
+
+preventive_practice_table <- age_adjusted_preventive %>% 
+  filter(label == 'At least three preventive practices followed') %>% 
+  mutate(age_adjusted_prop = age_adjusted_prop * 100) %>% 
+  pivot_wider(
+    id_cols = c(stratifier, variable, label, strata),
+    names_from = year,
+    values_from = age_adjusted_prop
+  ) %>% 
+  filter(strata %!in% c('Not available', 'Other Race/Not Hispanic')) %>% 
+  mutate(stratifier = factor(stratifier,
+                             c('overall', 'age', 'sex', 'race', 'edu', 'insurance', 'poverty')),
+         strata = case_when(strata == 'stat_0' ~ '-', 
+                            strata == 'Greater than HS' ~ 'Greater than high school',
+                            TRUE ~ strata)) %>% 
+  mutate(strata = as.factor(strata)) %>% 
+  mutate(stratifier = recode_factor(
+    stratifier,
+    overall = 'Overall',
+    age = 'Age',
+    sex = 'Sex',
+    race = 'Race/Ethnicity',
+    edu = 'Highest degree earned',
+    insurance = 'Insurance coverage',
+    poverty = 'Poverty level'
+  )) %>% 
+  group_by(stratifier) %>%
+  select(stratifier, strata, `2008`:`2020`) %>%
+  gt() %>% 
+  fmt_number(columns = `2008`:`2020`, decimals = 1)
+preventive_practice_table$`_data` <- preventive_practice_table$`_data`[c(1:18, 20, 19, 21), ]
+preventive_practice_table %>% 
   gtsave('preventive_practices.docx')
 ```
 
