@@ -19,6 +19,10 @@ tar_option_set(
   format = "rds" # default storage format
   # Set other options as needed.
 )
+# tar_make_future_config:
+library(future)
+library(future.callr)
+plan(callr)
 
 # Run the R scripts in the R/ folder with your custom functions:
 tar_source('scripts/functions.R')

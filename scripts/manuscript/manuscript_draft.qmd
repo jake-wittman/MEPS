@@ -5,6 +5,7 @@ editor: visual
 bibliography: references.bib
 csl: ama.csl
 ---
+
 ```{r}
 library(gtsummary)
 library(tidyverse)
@@ -16,12 +17,9 @@ library(gt)
 
 ```
 
-
 **Trends in Preventive Care Practices among US Adults with Diabetes, 2008-2020**
 
-Jacob T. Wittman, PhD
-Kai M. Bullard
-Stephen R. Benoit
+Jacob T. Wittman, PhD Kai M. Bullard Stephen R. Benoit
 
 CDC Affiliation
 
@@ -33,28 +31,26 @@ CDC Affiliation
 
 # Introduction
 
-- Diabetes affects a lot of people
-  - Kills people, makes them sick, reduces quality of life
-  - Cost of management is high and increasing
-- Advances in diabetes management
-  - Patients with diabetes must actually receive this care
-- Present trends in self-reported receipt of preventive care practices according to MEPS from 2008 - 2020.
+-   Diabetes affects a lot of people
+    -   Kills people, makes them sick, reduces quality of life
+    -   Cost of management is high and increasing
+-   Advances in diabetes management
+    -   Patients with diabetes must actually receive this care
+-   Present trends in self-reported receipt of preventive care practices according to MEPS from 2008 - 2020.
 
-Diabetes is a chronic disease that affects XX people in the USA. 
+Diabetes is a chronic disease that affects XX people in the USA.
 
 # Methods
 
 ## Data Source
 
-We used data from the Medical Expenditure Panel Survey (MEPS) from years 2008 - 2020. Participants in this survey are a subsample of households that participate in the National Health Interview Survey (NHIS). The MEP survey targets the civilian noninstitutionalized population in the US and provides national and regional estimates of health care use, expenditures, sources of payment and health insurance coverage. This survey also contains information on patient demographics, socioeconomics, and via the Diabetes Care Survey (DCS), information on diabetes preventive care practices. The DCS is a self-administered paper-and-pencil questionnaire that is provided to MEPS respondents who indicate that they have been told by a doctor or health professional that they have diabetes. 
+We used data from the Medical Expenditure Panel Survey (MEPS) from years 2008 - 2020. Participants in this survey are a subsample of households that participate in the National Health Interview Survey (NHIS). The MEP survey targets the civilian noninstitutionalized population in the US and provides national and regional estimates of health care use, expenditures, sources of payment and health insurance coverage. This survey also contains information on patient demographics, socioeconomics, and, via the Diabetes Care Survey (DCS), information on diabetes preventive care practices. The DCS is a self-administered paper-and-pencil questionnaire that is provided to MEPS respondents who indicate that they have been told by a doctor or health professional that they have diabetes.
 
-The data we used comes from the full-year consolidated file from MEPS for the 12 year time span. Our analysis is adjusted for the complex survey design, including clustering and stratification. 
+The data we used comes from the full-year consolidated file from MEPS for the 12 year time span of our report. We used a weighted population of XXX in this analysis. Our analysis is adjusted for the complex survey design, including clustering and stratification. Reported values for the proportions of different groups receiving recommended preventive care practices are age-adjusted.
 
 # Results
 
 # Discussion
-
-
 
 # References
 
@@ -62,6 +58,7 @@ The data we used comes from the full-year consolidated file from MEPS for the 12
 :::
 
 # Tables
+
 ```{r}
 # tar_load(age_adjusted_stats)
 # age_adjusted_stats %>% 
@@ -150,7 +147,6 @@ preventive_practice_table$`_data` <- preventive_practice_table$`_data`[c(1:18, 2
 preventive_practice_table %>% 
   gtsave('preventive_practices.docx')
 ```
-
 
 # Figures
 
@@ -303,4 +299,3 @@ ggsave(plot = all_test_plots,
        filename = 'figures/all_test_plots.tiff',
        dpi = 200)
 ```
-
