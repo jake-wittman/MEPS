@@ -14,7 +14,8 @@ options(clustermq.scheduler = 'multiprocess')
 
 # Set target options:
 tar_option_set(
-  packages = c("tidyverse", "haven", 'sitrep', 'gtsummary', 'srvyr', 'dtplyr'),
+  packages = c("tidyverse", "haven", 'sitrep', 'gtsummary', 'srvyr', 'dtplyr',
+               'nih.joinpoint'),
   # packages that your targets need to run
   format = "rds" # default storage format
   # Set other options as needed.
@@ -767,6 +768,47 @@ list(
     ) %>%
       mutate(age_adjusted_prop = case_when(stratifier == 'age' ~ p / 100,
                                            TRUE ~ age_adjusted_prop))
+  ),
+
+# Joinpoint analysis ------------------------------------------------------
+
+  tar_target(
+    joinpoint_regressions_proportions,
+    age_adjusted_stats %>%
+      filter(strata != 'Total') %>%
+      filter(strata != 'Not available') %>%
+      filter(strata != 'Other Race/Not Hispanic') %>%
+      mutate(variable_text = case_when(variable == 'a1c' ~ '2 or more A1C tests',
+                                       variable == 'CHOL_all' ~ 'Cholesterol tested',
+                                       variable == 'DENT_all' ~ '1 or more dentist visits',
+                                       variable == 'eye-exam' ~ 'Eye exam with dilation',
+                                       variable == 'flu' ~ 'Received flu vaccine',
+                                       variable == 'foot' ~ 'Foot examination'),
+             strata = case_when(strata == 'stat_0' ~ 'Overall',
+                                TRUE ~ strata)) %>%
+      mutate(strata = as.factor(strata),
+             year_adj = year - 2007) %>%
+      split(., f = ~.$stratifier + .$variable) %>%
+      map(., ~joinPointRegression(.x))
+  ),
+  tar_target(
+    joinpoint_regressions_preventive,
+    age_adjusted_preventive %>%
+      filter(strata != 'Total') %>%
+      filter(strata != 'Not available') %>%
+      filter(strata != 'Other Race/Not Hispanic') %>%
+      mutate(variable_text = case_when(variable == 'a1c' ~ '2 or more A1C tests',
+                                       variable == 'CHOL_all' ~ 'Cholesterol tested',
+                                       variable == 'DENT_all' ~ '1 or more dentist visits',
+                                       variable == 'eye-exam' ~ 'Eye exam with dilation',
+                                       variable == 'flu' ~ 'Received flu vaccine',
+                                       variable == 'foot' ~ 'Foot examination'),
+             strata = case_when(strata == 'stat_0' ~ 'Overall',
+                                TRUE ~ strata)) %>%
+      mutate(strata = as.factor(strata),
+             year_adj = year - 2007) %>%
+      split(., f = ~.$stratifier + .$variable) %>%
+      map(., ~joinPointRegression(.x))
   )
 
 )

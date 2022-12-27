@@ -858,9 +858,20 @@ ageAdjustTables <- function(data) {
                            age_prop = c(0.530535, 0.299194, 0.088967, 0.081304))
   data %>%
     left_join(age_prop_table, by = 'age') %>%
-    mutate(age_adjusted_prop = (p / 100) * age_prop) %>%
+    mutate(age_adjusted_prop = (p / 100) * age_prop,
+           age_adjusted_perc = age_adjusted_prop * 100,
+           count_div_pop_sq = n / (N^2),
+           age_prop_sq = age_prop ^ 2,
+           age_perc_sq = (age_prop * 100) ^2
+           ) %>%
     group_by(variable, label, strata, year) %>%
-    summarise(age_adjusted_prop = sum(age_adjusted_prop, na.rm = TRUE))
+    mutate(sum_age_prop_sq = sum(age_prop_sq),
+           sum_age_perc_sq = sum(age_perc_sq)
+           ) %>%
+    summarise(age_adjusted_prop = sum(age_adjusted_prop, na.rm = TRUE),
+              age_adjusted_perc = sum(age_adjusted_perc, na.rm = TRUE),
+              age_adjusted_se = sum(age_prop_sq * count_div_pop_sq, na.rm = TRUE)^0.5,
+              age_adjusted_se_perc = sum(age_perc_sq * count_div_pop_sq, na.rm = TRUE) ^ 0.5)
 }
 
 # Need to join the estimates from tbl_svysummary to the rest of the
@@ -1126,4 +1137,28 @@ makePreventiveTablesLongerbyAge2 <- function(table) {
     separate(parameters, into = col_names, sep = "-") %>%
     mutate(across(n:p_unweighted, ~as.numeric(gsub(",", "", .x))))
 
+}
+
+joinPointRegression <- function(data) {
+
+  run_opt <- run_options(
+    model = "ln",
+    min_joinpoints = 0,
+    max_joinpoints = 3,
+    n_cores = 1,
+    het_error = 'constant variance',
+    dependent_variable_type = 'proportion'
+  )
+  export_opt <- export_options()
+  jp <- joinpoint(
+    data,
+    x = year,
+    y = age_adjusted_prop,
+    by = strata,
+    verbose = F,
+    run_opts = run_opt,
+    export_opts = export_opt,
+    se = NULL
+  )
+  return(jp)
 }

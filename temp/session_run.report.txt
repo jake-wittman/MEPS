@@ -1,0 +1,5 @@
+"strata","Model","#Obs","#Param","DF","SSE","MSE","Auto Corr","Segment","Joinpoint","Joinpoint 95% LCL","Joinpoint 95% UCL","Intercept Estimate","Intercept Std Error","Intercept Test Statistic","Intercept P-Value","Slope Estimate","Slope Std Error","Slope Test Statistic","Slope P-Value","SlopeChg Estimate","SlopeChg Std Error","SlopeChg Test Statistic","SlopeChg P-Value"
+"18 to 44",0,13,2,11,0.079,0.007,Uncorrelated,0,.,.,.,-12.901,12.619,-1.022,0.329,0.006,0.006,0.967,0.354,.,.,.,.
+"45 to 64",0,13,2,11,0.008,0.001,Uncorrelated,0,.,.,.,-24.453,4.086,-5.985,0.000,0.012,0.002,5.848,0.000,.,.,.,.
+"65 to 74",0,13,2,11,0.032,0.003,Uncorrelated,0,.,.,.,-35.290,8.032,-4.394,0.001,0.017,0.004,4.330,0.001,.,.,.,.
+"75+",0,13,2,11,0.066,0.006,Uncorrelated,0,.,.,.,-43.095,11.543,-3.734,0.003,0.021,0.006,3.679,0.004,.,.,.,.

@@ -1,0 +1,1 @@
+"strata","Joinpoint Model","AAPC Index","Start Obs","End Obs","AAPC","AAPC C.I. Low","AAPC C.I. High","Statistically Significant (0=No  1=Yes)","Test Statistic","P-Value"

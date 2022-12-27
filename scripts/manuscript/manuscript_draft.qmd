@@ -17,6 +17,11 @@ library(gt)
 ```
 
 
+```{r}
+
+```
+
+
 **Trends in Preventive Care Practices among US Adults with Diabetes, 2008-2020**
 
 Jacob T. Wittman, PhD
