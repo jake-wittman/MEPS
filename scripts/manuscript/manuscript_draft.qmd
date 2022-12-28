@@ -14,6 +14,11 @@ library(targets)
 library(gt)
 
 `%!in%` <- Negate(`%in%`)
+sigfig <- function(number, digits) {
+
+   formatC(signif(number, digits = digits), digits = digits, format = "fg", flag = "#")
+  
+}
 
 ```
 
@@ -113,21 +118,82 @@ preventive_practice_table %>%
 ```
 
 ```{r}
+# Clean up the AAPC table and get it into format for printing to table
+cleaned_jp_aapc <- jp_prevention_aapc %>% 
+  select(-aapc_index) %>% 
+  mutate(across(starts_with('aapc'),
+                ~sigfig(.x, digits = 2)),
+         across(starts_with('aapc'),
+                ~case_when(.x == ' NA' ~ NA_character_,
+                           TRUE ~ .x)), 
+         AAPC = case_when(!is.na(aapc) ~ glue::glue('{aapc} ({aapc_c_i_low}, {aapc_c_i_high})'),
+                          TRUE ~ NA_character_)) %>%
+  select(stratifier, strata, AAPC)
 
-preventive_practice_table <- age_adjusted_preventive %>% 
+# Format APC table for future joining
+cleaned_jp_apc <- jp_prevention_apc %>% 
+  # No model has more than a single joinpoint, so make wider and then
+  # remove the excess columns to determine if there's no join point (segmend_end = 2020)
+  # or a joinpoint (segment_end != 2020)
+  pivot_wider(id_cols = c(stratifier, strata, model),
+              names_from = segment,
+              values_from = c(segment_start, segment_end, apc, p_value, apc_significant,
+                              apc_95_lcl, apc_95_ucl)
+  ) %>% 
+  select(-segment_start_0, -segment_start_1, -segment_end_1) %>% 
+  # Make segment empty if no joinpoint
+  mutate(segment = case_when(segment_end_0 == 2020 ~ NA_integer_,
+                             TRUE ~ segment_end_0)) %>% 
+  # MAke apc empty if not significant
+  mutate(across(c(apc_0, apc_95_lcl_0, apc_95_ucl_0),
+                ~ case_when(p_value_0 > 0.05 & p_value_1 > 0.05 ~ NA_real_,
+                            TRUE ~ .x)), 
+         across(c(apc_1, apc_95_lcl_1, apc_95_ucl_1),
+                ~ case_when(p_value_0 > 0.05 & p_value_1 > 0.05 ~ NA_real_,
+                            TRUE ~ .x)),
+         across(starts_with('apc') | starts_with('p_'),
+                ~sigfig(.x, digits = 2)),
+         across(starts_with('apc') | starts_with('p_'),
+                ~case_when(.x == ' NA' ~ NA_character_,
+                           TRUE ~ .x))) %>% 
+  # Concatenate apc column with CI columns
+  mutate(`APC Period 1` = case_when(
+       !is.na(apc_0) ~ glue::glue('{apc_0} ({apc_95_lcl_0}, {apc_95_ucl_0})'),
+       TRUE ~ NA_character_
+                                    ),
+    `APC Period 2` = case_when(
+       !is.na(apc_1) ~ glue::glue('{apc_1} ({apc_95_lcl_1}, {apc_95_ucl_1})'),
+       TRUE ~ NA_character_
+    )
+  ) %>%
+  select(stratifier, strata, segment, starts_with('APC '))
+
+# Clean up the age adjusted preventive practices and then join with the aapc table
+clean_age_adjusted <- age_adjusted_preventive %>% 
+  # Filter to just the >=3 practices
   filter(label == 'At least three preventive practices followed') %>% 
-  mutate(age_adjusted_prop = age_adjusted_prop * 100) %>% 
+  # Filter down to every other year
+  filter(year %in% seq(2000, 2020, by = 2)) %>% 
+  mutate(age_adjusted_prop = age_adjusted_prop * 100,
+         chr_age_adj_prop = sigfig(age_adjusted_prop, digits = 4),
+         age_adjusted_se_perc = sigfig(age_adjusted_se_perc, digits = 2),
+         percentage = glue::glue('{chr_age_adj_prop} ({age_adjusted_se_perc})')) %>% 
   pivot_wider(
     id_cols = c(stratifier, variable, label, strata),
     names_from = year,
-    values_from = age_adjusted_prop
+    values_from = c(age_adjusted_prop, percentage),
   ) %>% 
+  # Remove excess strata
   filter(strata %!in% c('Not available', 'Other Race/Not Hispanic')) %>% 
+  # Relevel stratifier factor, clean up stratifier and strata names
   mutate(stratifier = factor(stratifier,
                              c('overall', 'age', 'sex', 'race', 'edu', 'insurance', 'poverty')),
          strata = case_when(strata == 'stat_0' ~ '-', 
                             strata == 'Greater than HS' ~ 'Greater than high school',
-                            TRUE ~ strata)) %>% 
+                            TRUE ~ strata),
+         `Percent Change` = sigfig(((age_adjusted_prop_2020 - age_adjusted_prop_2008) / age_adjusted_prop_2008) * 100, digits = 4)) %>% 
+  select(-starts_with('age_adjusted_prop')) %>% 
+  setNames(., str_replace(names(.), 'percentage_', "")) %>% 
   mutate(strata = as.factor(strata)) %>% 
   mutate(stratifier = recode_factor(
     stratifier,
@@ -139,10 +205,30 @@ preventive_practice_table <- age_adjusted_preventive %>%
     insurance = 'Insurance coverage',
     poverty = 'Poverty level'
   )) %>% 
+  # Join with AAPC table
+  left_join(cleaned_jp_aapc, by = c('stratifier', 'strata'))
+
+
+
+cleaned_preventive_df <- left_join(clean_age_adjusted, cleaned_jp_apc, by = c('stratifier', 'strata')) %>% 
+  mutate(AAPC = case_when(is.na(AAPC) & is.na(`APC Period 2`) ~ `APC Period 1`,
+                          TRUE ~ AAPC),
+         `APC Period 1` = case_when(is.na(`APC Period 1`) & is.na(`APC Period 2`) ~ AAPC,
+                                    TRUE ~ `APC Period 1`)) %>%
+  # Rename poverty levels
+  mutate(strata = case_when(as.character(strata) == 'Poor/Negative' ~ 'Income < 100% of the poverty line',
+                            as.character(strata) == 'Low income' ~ 'Income 100% - 199% of the poverty line',
+                            as.character(strata) == 'Middle income' ~ 'Income 200% - 399% of the poverty line',
+                            as.character(strata) == 'High income' ~ 'Income > 400% of the poverty line',
+                            TRUE ~ as.character(strata))) 
+
+
+preventive_practice_table <- cleaned_preventive_df %>% 
   group_by(stratifier) %>%
-  select(stratifier, strata, `2008`:`2020`) %>%
+  select(stratifier, strata, `2008`:`2020`, `Percent Change`, `Joinpoint Year` = segment,
+         `APC Period 1`, `APC Period 2`, `AAPC`) %>%
   gt() %>% 
-  fmt_number(columns = `2008`:`2020`, decimals = 1)
+  sub_missing(missing_text = ' ')
 preventive_practice_table$`_data` <- preventive_practice_table$`_data`[c(1:18, 20, 19, 21), ]
 preventive_practice_table %>% 
   gtsave('preventive_practices.docx')

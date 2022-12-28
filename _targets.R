@@ -722,7 +722,8 @@ list(
         nest = TRUE
       ) %>%
       preventivePracticebyAge(., by = 'AGE_all', diab_list) %>%
-      makePreventiveTablesLongerbyAge2(),
+      makePreventiveTablesLongerbyAge2() %>%
+      mutate(age_adjusted_se_perc = p.std.error),
     pattern = map(diab_list)
   ),
   tar_target(
@@ -777,7 +778,7 @@ list(
 # Joinpoint analysis ------------------------------------------------------
 
   tar_target(
-    joinpoint_regressions_proportions,
+    jp_regressions_proportions,
     age_adjusted_stats %>%
       filter(strata != 'Total') %>%
       filter(strata != 'Not available') %>%
@@ -796,7 +797,7 @@ list(
       map(., ~joinPointRegression(.x))
   ),
   tar_target(
-    joinpoint_regressions_preventive,
+    jp_regressions_preventive,
     age_adjusted_preventive %>%
       filter(strata != 'Total') %>%
       filter(strata != 'Not available') %>%
@@ -813,6 +814,88 @@ list(
              year_adj = year - 2007) %>%
       split(., f = ~.$stratifier + .$variable) %>%
       map(., ~joinPointRegression(.x))
+  ),
+  tar_target(
+    jp_proportion_lines,
+    map2(jp_regressions_proportions, names(jp_regressions_proportions), function(.x, .y) {
+      .x$report %>%
+        mutate(group.practice = .y)
+    }) %>%
+      bind_rows() %>%
+      separate(group.practice, c('stratifier', 'practice'), sep = '[.]') %>%
+      mutate(strata = case_when(stratifier == 'overall' ~ 'stat_0',
+                                TRUE ~ strata)) %>%
+      mutate(stratifier = factor(stratifier,
+                                 c('overall', 'age', 'sex', 'race', 'edu', 'insurance', 'poverty')),
+             strata = case_when(strata == 'stat_0' ~ '-',
+                                strata == 'Greater than HS' ~ 'Greater than high school',
+                                TRUE ~ strata)) %>%
+      mutate(strata = as.factor(strata)) %>%
+      mutate(stratifier = recode_factor(
+        stratifier,
+        overall = 'Overall',
+        age = 'Age',
+        sex = 'Sex',
+        race = 'Race/Ethnicity',
+        edu = 'Highest degree earned',
+        insurance = 'Insurance coverage',
+        poverty = 'Poverty level'
+      ))
+  ),
+  tar_target(
+    jp_prevention_aapc,
+    map(jp_regressions_preventive, function(.x, .y) {
+      .x$aapc
+    }) %>%
+      bind_rows(.id = 'group.practice') %>%
+      filter(str_detect(group.practice, 'atleast_three')) %>%
+      separate(group.practice, c('stratifier', 'practice'), sep = '[.]') %>%
+      mutate(strata = case_when(stratifier == 'overall' ~ 'stat_0',
+                                TRUE ~ strata)) %>%
+      mutate(stratifier = factor(stratifier,
+                                 c('overall', 'age', 'sex', 'race', 'edu', 'insurance', 'poverty')),
+             strata = case_when(strata == 'stat_0' ~ '-',
+                                strata == 'Greater than HS' ~ 'Greater than high school',
+                                TRUE ~ strata)) %>%
+      mutate(strata = as.factor(strata)) %>%
+      mutate(stratifier = recode_factor(
+        stratifier,
+        overall = 'Overall',
+        age = 'Age',
+        sex = 'Sex',
+        race = 'Race/Ethnicity',
+        edu = 'Highest degree earned',
+        insurance = 'Insurance coverage',
+        poverty = 'Poverty level'
+      ))
+  ),
+tar_target(
+  jp_prevention_apc,
+  map(jp_regressions_preventive, function(.x, .y) {
+    .x$apc
+  }) %>%
+    bind_rows(.id = 'group.practice') %>%
+    filter(str_detect(group.practice, 'atleast_three')) %>%
+    separate(group.practice, c('stratifier', 'practice'), sep = '[.]') %>%
+    mutate(strata = case_when(stratifier == 'overall' ~ 'stat_0',
+                              TRUE ~ strata)) %>%
+    mutate(stratifier = factor(stratifier,
+                               c('overall', 'age', 'sex', 'race', 'edu', 'insurance', 'poverty')),
+           strata = case_when(strata == 'stat_0' ~ '-',
+                              strata == 'Greater than HS' ~ 'Greater than high school',
+                              TRUE ~ strata)) %>%
+    mutate(strata = as.factor(strata)) %>%
+    mutate(stratifier = recode_factor(
+      stratifier,
+      overall = 'Overall',
+      age = 'Age',
+      sex = 'Sex',
+      race = 'Race/Ethnicity',
+      edu = 'Highest degree earned',
+      insurance = 'Insurance coverage',
+      poverty = 'Poverty level'
+    ))
   )
-
 )
+
+

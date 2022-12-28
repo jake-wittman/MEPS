@@ -1149,7 +1149,9 @@ joinPointRegression <- function(data) {
     het_error = 'constant variance',
     dependent_variable_type = 'proportion'
   )
-  export_opt <- export_options()
+  export_opt <- export_options(
+    aapc_full_range = TRUE
+  )
   jp <- joinpoint(
     data,
     x = year,
