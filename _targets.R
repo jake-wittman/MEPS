@@ -895,7 +895,17 @@ tar_target(
       insurance = 'Insurance coverage',
       poverty = 'Poverty level'
     ))
-  )
+  ),
+tar_target(
+  jp_proportion_plot_data,
+  map(jp_regressions_proportions, ~.x$data_export %>%
+        mutate(apc = as.character(apc))) %>%
+    map2(., names(.), ~.x %>%
+            mutate(stratifier.practice = .y)) %>%
+    bind_rows() %>%
+    separate(stratifier.practice, c('stratifier', 'variable'), sep = '[.]') %>%
+    ungroup()
+)
 )
 
 

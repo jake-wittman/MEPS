@@ -241,6 +241,8 @@ joinTables|function|6f6aec054888512c|||||||||||||||
 jp_prevention_aapc|stem|2f76ee083b3c1ffa|cbd4a4cdf269464b|489eb4130c054077|-242757067||t19354.7002454418s|4585df39966fd58e|1335|rds|local|vector|||0.05||
 jp_prevention_apc|stem|b120350fbc2c525e|bbdc6492ce851e4c|489eb4130c054077|626916996||t19354.7002462482s|fd9f3ebf3a91f511|1584|rds|local|vector|||0.03||
 jp_proportion_lines|stem|71b898c1143aae61|64c3df51df5a7852|6e26568863c1cb25|-17212524||t19354.6254131603s|a24fd4724809bff1|7604|rds|local|vector|||0.12||
+jp_proportion_plot_data|stem|b954fd1d79d048d2|ea26369b580a4844|265d5d9f020e8cd2|-1722786940||t19354.7602057523s|8ce50bbb86733d05|27769|rds|local|vector|||0.14||
+jp_proportion_plots|stem|49459a1695febfab|04ae4f12b0994919|0aadccaaa48fea57|1109237601||t19354.7367757423s|eb9bfa925c5d86c0|1316604|rds|local|vector|||1.75||
 jp_regressions_preventive|stem|6ccb772dbe42b391|41c538f2d486daa3|f8ae735835aaf922|-88329365||t19354.7002443051s|8683d7cbdc11da6b|121482|rds|local|vector|||96.66||
 jp_regressions_proportions|stem|a196b6899a29a381|3a7dac766bf74e04|6f06fdf2201cb304|-1565510356||t19354.5761171176s|102378391dd8740f|58378|rds|local|vector|||46.85||
 makePreventiveTablesLongerbyAge|function|de5cb4c20b3a3b7a|||||||||||||||
