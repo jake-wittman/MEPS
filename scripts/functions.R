@@ -1009,66 +1009,7 @@ cumulativePractices <- function(data) {
     select(-ends_with('bin'))
 }
 
-preventivePracticebyAge <- function(survey.object, by = NULL, data) {
-  if (is.null(by) || by != 'AGE_all'){
-  out_table <- tbl_strata(
-    survey.object,
-    strata = AGE_all,
-    .tbl_fun =
-      ~.x %>%
-      tbl_svysummary(
-        by = by,
-        digits = list(everything() ~ 12),
-        include = c(
-          zero_practices,
-          one_practices,
-          two_practices,
-          three_practices,
-          four_practices,
-          five_practices,
-          six_practices,
-          atleast_one_practices,
-          atleast_two_practices,
-          atleast_three_practices,
-          atleast_four_practices,
-          atleast_five_practices,
-          atleast_six_practices
-        ),
-        label = list(
-          zero_practices ~ "No preventive practices followed",
-          one_practices ~ "One preventive practice followed",
-          two_practices ~ "Two preventive practices followed",
-          three_practices ~ "Three preventive practices followed",
-          four_practices ~ "Four preventive practices followed",
-          five_practices ~ "Five preventive practices followed",
-          six_practices ~ "Six preventive practices followed",
-          atleast_one_practices ~ "At least one preventive practice followed",
-          atleast_two_practices ~ "At least two preventive practices followed",
-          atleast_three_practices ~ "At least three preventive practices followed",
-          atleast_four_practices ~ "At least four preventive practices followed",
-          atleast_five_practices ~ "At least five preventive practices followed",
-          atleast_six_practices ~ "At least six preventive practices followed"
-        ),
-        statistic = list(
-          all_categorical() ~ "{n}-{N}-{p}-{p.std.error}-{n_unweighted}-{N_unweighted}-{p_unweighted}"
-        )
-      )
-  )
-
-  out_table$table_body <- out_table$table_body %>%
-    mutate(
-      year = data$year[1]
-    )
-  if (is.null(by) == FALSE) {
-    names(out_table$table_body)[str_detect(names(out_table$table_body), pattern = 'stat')] <-
-      paste(levels(data[[by]]), rep(c('18-44', '45-64', '65-74', '75+'), each = length(levels(data[[by]]))), sep = "_")
-  } else {
-    names(out_table$table_body)[str_detect(names(out_table$table_body), pattern = 'stat')] <-
-      paste("stat_0", rep(c('18-44', '45-64', '65-74', '75+'), each = 1), sep = "_")
-  }
-  return(out_table$table_body)
-  }
-   else {
+preventivePractice <- function(survey.object, by = NULL, data) {
     out_table <- tbl_svysummary(
       survey.object,
       by = by,
@@ -1114,21 +1055,21 @@ preventivePracticebyAge <- function(survey.object, by = NULL, data) {
         levels(data[[by]])
     }
     return(out_table$table_body)
-  }
 }
-makePreventiveTablesLongerbyAge <- function(table) {
-  col_names <- c('n', 'N', 'p', 'p.std.error', 'n_unweighted', 'N_unweighted', 'p_unweighted')
-  table %>%
-    pivot_longer(cols = -c(variable, starts_with('var_type'), var_label, row_type, label, year),
-                 names_to = c("strata", 'age'),
-                 names_pattern = '(.*)_(.*)',
-                 values_to = 'parameters') %>%
-    separate(parameters, into = col_names, sep = "-") %>%
-    mutate(across(n:p_unweighted, ~as.numeric(gsub(",", "", .x))))
 
-}
+# makePreventiveTablesLongerbyAge <- function(table) {
+#   col_names <- c('n', 'N', 'p', 'p.std.error', 'n_unweighted', 'N_unweighted', 'p_unweighted')
+#   table %>%
+#     pivot_longer(cols = -c(variable, starts_with('var_type'), var_label, row_type, label, year),
+#                  names_to = c("strata", 'age'),
+#                  names_pattern = '(.*)_(.*)',
+#                  values_to = 'parameters') %>%
+#     separate(parameters, into = col_names, sep = "-") %>%
+#     mutate(across(n:p_unweighted, ~as.numeric(gsub(",", "", .x))))
+
+# }
 # For making the preventive table longer for age. Too lazy to give it a good name.
-makePreventiveTablesLongerbyAge2 <- function(table) {
+makePreventiveTablesLonger <- function(table) {
   col_names <- c('n', 'N', 'p', 'p.std.error', 'n_unweighted', 'N_unweighted', 'p_unweighted')
   table %>%
     pivot_longer(cols = -c(variable, var_type, var_label, row_type, label, year),
@@ -1144,7 +1085,7 @@ joinPointRegression <- function(data) {
   run_opt <- run_options(
     model = "ln",
     min_joinpoints = 0,
-    max_joinpoints = 3,
+    max_joinpoints = 1,
     n_cores = 1,
     het_error = 'constant variance',
     dependent_variable_type = 'proportion'
@@ -1155,7 +1096,7 @@ joinPointRegression <- function(data) {
   jp <- joinpoint(
     data,
     x = year,
-    y = age_adjusted_prop,
+    y = p,
     by = strata,
     verbose = F,
     run_opts = run_opt,

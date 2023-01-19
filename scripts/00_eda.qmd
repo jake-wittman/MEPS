@@ -429,7 +429,6 @@ edu_indicator %>%
 
 ```
 
-
 ```{r}
 tar_load(contains('focus'))
 dats <- list(overall = overall_focus, edu = edu_focus, race = race_focus, sex = sex_focus, age = age_focus)
@@ -493,4 +492,3 @@ plots <- list(
 plots %>% 
   wrap_plots(nrow = 5)
 ```
-

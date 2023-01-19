@@ -1,0 +1,51 @@
+---
+title: "Untitled"
+format: docx
+editor: visual
+project: 
+  execute-dir: project
+execute:
+  echo: false
+  warning: false
+filters:
+  - docx-landscape.lua  
+---
+
+```{r}
+library(ggplot2)
+library(patchwork)
+myplot1 <- ggplot(mtcars, aes(mpg, wt)) +
+  geom_point()
+myplot2 <- ggplot(mtcars, aes(mpg, cyl)) +
+  geom_point()
+```
+
+```{r}
+myplot1 + myplot2
+```
+
+```{r}
+#| fig-width: 10
+myplot1 + myplot2
+```
+
+```{r}
+#| fig-width: 15
+myplot1 + myplot2
+```
+
+::: landscape
+```{r}
+myplot1 + myplot2
+```
+
+```{r}
+#| fig-width: 5
+myplot1 + myplot2
+```
+
+```{r}
+#| fig-width: 10
+myplot1 + myplot2
+```
+:::

@@ -15,7 +15,8 @@ options(clustermq.scheduler = 'multiprocess')
 # Set target options:
 tar_option_set(
   packages = c("tidyverse", "haven", 'sitrep', 'gtsummary', 'srvyr', 'dtplyr',
-               'nih.joinpoint'),
+               'nih.joinpoint', 'survey'),
+  debug = 'jp_regressions_proportions',
   # packages that your targets need to run
   format = "rds" # default storage format
   # Set other options as needed.
@@ -324,6 +325,7 @@ list(
         strata = VARSTR_all,
         nest = TRUE
       ) %>%
+      svystandardize(., ~ AGE_all, ~1, population = c(0.530535, 0.299194, 0.088967, 0.081304)) %>%
       createTableAllStats(., by = NULL, diab_list) %>%
       makeTablesLonger(),
     pattern = map(diab_list)
@@ -337,9 +339,9 @@ list(
         strata = VARSTR_all,
         nest = TRUE
       ) %>%
-      createTableAllStatsbyAge(., by = NULL, diab_list) %>%
-      makeTablesLongerbyAge() %>%
-      ageAdjustTables(),
+      svystandardize(., ~ AGE_all, ~1, population = c(0.530535, 0.299194, 0.088967, 0.081304)) %>%
+      createTableAllStats(., by = NULL, diab_list) %>%
+      makeTablesLonger(),
     pattern = map(diab_list)
   ),
   tar_target(
@@ -369,9 +371,9 @@ list(
         strata = VARSTR_all,
         nest = TRUE
       ) %>%
-      createTableAllStatsbyAge(., by = "SEX", diab_list) %>%
-      makeTablesLongerbyAge() %>%
-      ageAdjustTables(),
+      svystandardize(., ~ AGE_all, ~1, population = c(0.530535, 0.299194, 0.088967, 0.081304)) %>%
+      createTableAllStats(., by = "SEX", diab_list) %>%
+      makeTablesLonger(),
     pattern = map(diab_list)
     ),
   tar_target(sex_stats_joined,
@@ -399,9 +401,9 @@ list(
         strata = VARSTR_all,
         nest = TRUE
       ) %>%
-      createTableAllStatsbyAge(., by = "RACE_all", diab_list) %>%
-      makeTablesLongerbyAge() %>%
-      ageAdjustTables(),
+      svystandardize(., ~ AGE_all, ~1, population = c(0.530535, 0.299194, 0.088967, 0.081304)) %>%
+      createTableAllStats(., by = "RACE_all", diab_list) %>%
+      makeTablesLonger(),
     pattern = map(diab_list)
   ),
   tar_target(race_stats_joined,
@@ -428,9 +430,9 @@ list(
         strata = VARSTR_all,
         nest = TRUE
       ) %>%
-      createTableAllStatsbyAge(., by = "HIDEG_all", diab_list) %>%
-      makeTablesLongerbyAge() %>%
-      ageAdjustTables(),
+      svystandardize(., ~ AGE_all, ~1, population = c(0.530535, 0.299194, 0.088967, 0.081304)) %>%
+      createTableAllStats(., by = "HIDEG_all", diab_list) %>%
+      makeTablesLonger(),
     pattern = map(diab_list)
   ),
   tar_target(edu_stats_joined,
@@ -470,9 +472,9 @@ list(
         strata = VARSTR_all,
         nest = TRUE
       ) %>%
-      createTableAllStatsbyAge(., by = "POVCAT_all", diab_list) %>%
-      makeTablesLongerbyAge() %>%
-      ageAdjustTables(),
+      svystandardize(., ~ AGE_all, ~1, population = c(0.530535, 0.299194, 0.088967, 0.081304)) %>%
+      createTableAllStats(., by = "POVCAT_all", diab_list) %>%
+      makeTablesLonger(),
     pattern = map(diab_list)
   ),
   tar_target(pov_stats_joined,
@@ -499,9 +501,9 @@ list(
         strata = VARSTR_all,
         nest = TRUE
       ) %>%
-      createTableAllStatsbyAge(., by = "INSCOV_all", diab_list) %>%
-      makeTablesLongerbyAge() %>%
-      ageAdjustTables(),
+      svystandardize(., ~ AGE_all, ~1, population = c(0.530535, 0.299194, 0.088967, 0.081304)) %>%
+      createTableAllStats(., by = "INSCOV_all", diab_list) %>%
+      makeTablesLonger(),
     pattern = map(diab_list)
   ),
   tar_target(ins_stats_joined,
@@ -526,13 +528,13 @@ list(
     age_adjusted_stats,
     bind_rows(
       list(
-        overall = overall_stats_joined,
+        overall = overall_age_adjusted,
         age = age_all_stats,
-        edu = edu_stats_joined,
-        race = race_stats_joined,
-        sex = sex_stats_joined,
-        insurance = ins_stats_joined,
-        poverty = pov_stats_joined
+        edu = edu_age_adjusted,
+        race = race_age_adjusted,
+        sex = sex_age_adjusted,
+        insurance = ins_age_adjusted,
+        poverty = pov_age_adjusted
       ),
       .id = 'stratifier'
     ) %>%
@@ -545,9 +547,7 @@ list(
         'Once a year or more'
       )
       ) %>%
-      filter(strata %!in% c('Not available', 'Other Race/Not Hispanic')) %>%
-      mutate(age_adjusted_prop = case_when(stratifier == 'age' ~ p / 100,
-                                        TRUE ~ age_adjusted_prop))
+      filter(strata %!in% c('Not available', 'Other Race/Not Hispanic'))
   ),
   tar_target(
     stats_table,
@@ -665,9 +665,9 @@ list(
         strata = VARSTR_all,
         nest = TRUE
       ) %>%
-      preventivePracticebyAge(., by = NULL, diab_list) %>%
-      makePreventiveTablesLongerbyAge() %>%
-      ageAdjustTables(),
+      svystandardize(., ~ AGE_all, ~1, population = c(0.530535, 0.299194, 0.088967, 0.081304)) %>%
+      preventivePractice(., by = NULL, diab_list) %>%
+      makePreventiveTablesLonger(),
     pattern = map(diab_list)
   ),
   tar_target(
@@ -679,9 +679,9 @@ list(
         strata = VARSTR_all,
         nest = TRUE
       ) %>%
-      preventivePracticebyAge(., by = "SEX", diab_list) %>%
-      makePreventiveTablesLongerbyAge() %>%
-      ageAdjustTables(),
+      svystandardize(., ~ AGE_all, ~1, population = c(0.530535, 0.299194, 0.088967, 0.081304)) %>%
+      preventivePractice(., by = 'SEX', diab_list) %>%
+      makePreventiveTablesLonger(),
     pattern = map(diab_list)
   ),
   tar_target(
@@ -693,9 +693,9 @@ list(
         strata = VARSTR_all,
         nest = TRUE
       ) %>%
-      preventivePracticebyAge(., by = "RACE_all", diab_list) %>%
-      makePreventiveTablesLongerbyAge() %>%
-      ageAdjustTables(),
+      svystandardize(., ~ AGE_all, ~1, population = c(0.530535, 0.299194, 0.088967, 0.081304)) %>%
+      preventivePractice(., by = 'RACE_all', diab_list) %>%
+      makePreventiveTablesLonger(),
     pattern = map(diab_list)
   ),
   tar_target(
@@ -707,9 +707,9 @@ list(
         strata = VARSTR_all,
         nest = TRUE
       ) %>%
-      preventivePracticebyAge(., by = "HIDEG_all", diab_list) %>%
-      makePreventiveTablesLongerbyAge() %>%
-      ageAdjustTables(),
+      svystandardize(., ~ AGE_all, ~1, population = c(0.530535, 0.299194, 0.088967, 0.081304)) %>%
+      preventivePractice(., by = 'HIDEG_all', diab_list) %>%
+      makePreventiveTablesLonger(),
     pattern = map(diab_list)
   ),
   tar_target(
@@ -721,9 +721,9 @@ list(
         strata = VARSTR_all,
         nest = TRUE
       ) %>%
-      preventivePracticebyAge(., by = 'AGE_all', diab_list) %>%
-      makePreventiveTablesLongerbyAge2() %>%
-      mutate(age_adjusted_se_perc = p.std.error),
+      svystandardize(., ~ AGE_all, ~1, population = c(0.530535, 0.299194, 0.088967, 0.081304)) %>%
+      preventivePractice(., by = 'AGE_all', diab_list) %>%
+      makePreventiveTablesLonger(),
     pattern = map(diab_list)
   ),
   tar_target(
@@ -735,9 +735,9 @@ list(
         strata = VARSTR_all,
         nest = TRUE
       ) %>%
-      preventivePracticebyAge(., by = "POVCAT_all", diab_list) %>%
-      makePreventiveTablesLongerbyAge() %>%
-      ageAdjustTables(),
+      svystandardize(., ~ AGE_all, ~1, population = c(0.530535, 0.299194, 0.088967, 0.081304)) %>%
+      preventivePractice(., by = 'POVCAT_all', diab_list) %>%
+      makePreventiveTablesLonger(),
     pattern = map(diab_list)
   ),
 
@@ -750,9 +750,9 @@ list(
         strata = VARSTR_all,
         nest = TRUE
       ) %>%
-      preventivePracticebyAge(., by = "INSCOV_all", diab_list) %>%
-      makePreventiveTablesLongerbyAge() %>%
-      ageAdjustTables(),
+      svystandardize(., ~ AGE_all, ~1, population = c(0.530535, 0.299194, 0.088967, 0.081304)) %>%
+      preventivePractice(., by = 'INSCOV_all', diab_list) %>%
+      makePreventiveTablesLonger(),
     pattern = map(diab_list)
   ),
 
@@ -770,9 +770,7 @@ list(
         poverty = pov_preventive
       ),
       .id = 'stratifier'
-    ) %>%
-      mutate(age_adjusted_prop = case_when(stratifier == 'age' ~ p / 100,
-                                           TRUE ~ age_adjusted_prop))
+    )
   ),
 
 # Joinpoint analysis ------------------------------------------------------
