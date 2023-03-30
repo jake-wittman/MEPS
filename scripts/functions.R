@@ -6,10 +6,21 @@ library(haven)
 # Read in data
 readAndSelect <- function(data_path, data_year) {
   yr <- substr(data_year, 7, 8)
+  prv_yr <- str_pad(as.numeric(yr) - 1, width = 2, side = 'left', pad = '0')
   eye_var <- paste0('DSEY', yr, '53')
   chol_var <- paste0('DSCH', yr, '53')
   feet_var <- paste0('DSFT', yr, '53')
   flu_var <- paste0('DSFL', yr, '53')
+  flu_var_prv <- paste0('DSFL', prv_yr, '53') # Checking the previous year flu shot variable
+  medicaid <- paste0('MCDEV', yr)
+  medicare <- paste0('MCREV', yr)
+  private <- paste0('PRVEV', yr)
+  tricare <- paste0('TRIEV', yr)
+  other_pub <- paste0('GVAEV', yr) # Other public
+  other_pub2 <- paste0('GVBEV', yr) # Other public that is HMO
+  other_pub3 <- paste0('GVCEV', yr) # Other public where premium paid
+  other_pubA <- paste0('OPAEV', yr) # Other pub pre 2018
+  other_pubB <- paste0('OPBEV', yr) # Other pub pre 2018
   if (str_ends(data_path, '[sSpP]{3}') == TRUE) {
     temp <- read_xpt(data_path)
 
@@ -46,15 +57,16 @@ readAndSelect <- function(data_path, data_year) {
            starts_with('POVCAT'), # Categorical poverty status
            #starts_with('POVLEV'), # Continuous poverty status
            starts_with('REGION'),
-           starts_with('DENTCK53'), # Dental checkup, only 2000 - 2016,
+           #starts_with('DENTCK53'), # Dental checkup, only 2000 - 2016,
            matches('DVTOT[0-9]{2}'), # # of dental care visits in YYYY
            starts_with('CHOLCK'), # Cholesterol check, only 2000 - 2016,
            starts_with('CHECK53'), # Routine check up, only 2000 - 2016,
            starts_with('FLUSHT'), # Flu shot. only 2000 - 2016
-           starts_with('DSFL'),
+           #starts_with('DSFL'),
            starts_with('DIAB'), # 3 different variable names for diabetes, all start with DIABDX. this should also grab the DAIBW weight variables
            starts_with(!!eye_var), # Get only the eye variable for each year
-           starts_with(!!flu_var),
+           #starts_with(!!flu_var),
+           starts_with(!!flu_var_prv),
            starts_with(!!chol_var),
            starts_with(!!feet_var),
            starts_with('DSEYE53'), # Have to get the 2001 eye check variable too
@@ -70,6 +82,15 @@ readAndSelect <- function(data_path, data_year) {
            -contains('REGION31'), # Remove excess region variables
            -contains('REGION42'),
            -contains('REGION53'),
+           starts_with('MCDEV'), # Medicaid/SCHIP
+           starts_with('MCREV'), # Medicaire
+           starts_with(!!private),
+           starts_with(!!tricare),
+           starts_with(!!other_pub),
+           starts_with(!!other_pub2),
+           starts_with(!!other_pub3),
+           starts_with(!!other_pubA),
+           starts_with(!!other_pubB),
            starts_with('PERWT'), # Person weight level. Not sure I need this, since just working with DCS variables
            starts_with('INSCOP') # Inscope, again not sure if needed but putting here anyway for now
     ) %>%
@@ -78,7 +99,7 @@ readAndSelect <- function(data_path, data_year) {
 
 # Clean the data
 cleanMepsData <- function(dat) {
-  dat <- dat %>%
+  temp_dat <- dat %>%
     mutate(
       DSEY0153 = case_when(
         DSEYE53 == 2 ~ 1,
@@ -131,13 +152,13 @@ cleanMepsData <- function(dat) {
       )
     ) %>%
     # NEed to coalesce DVTOT variables before cleaning
-    mutate(all_DVTOT = coalesce(!!!select(., num_range('DVTOT', 17:20)))) %>%
+    mutate(all_DVTOT = coalesce(!!!select(., num_range('DVTOT', 08:20, width = 2)))) %>%
     select(-starts_with('DVTOT'))
 
 
 
   # Recode factors to facilitate working with them
-  dat <- dat %>%
+  temp_dat <- temp_dat %>%
     mutate(
       across(
         intersect(starts_with('DSEY'),
@@ -193,15 +214,6 @@ cleanMepsData <- function(dat) {
         )
       ),
       across(
-        starts_with('INSCOV'),
-        ~ recode_factor(
-          .x,
-          `1` = 'Any private',
-          `2` = 'Public only',
-          `3` = 'Uninsured'
-        )
-      ),
-      across(
         intersect(starts_with('DSFL'),
                   ends_with('53')),
         ~ recode_factor(
@@ -243,7 +255,7 @@ cleanMepsData <- function(dat) {
         )
       ),
       across(
-        ends_with('DVTOT'),
+        contains('DVTOT'),
         ~ as.factor(case_when(.x >= 1 ~ 1,
                               .x == 0 ~ 0,
                               TRUE ~ -9)) %>%
@@ -384,37 +396,54 @@ cleanMepsData <- function(dat) {
             )
           )
       ),
-      DENTCK53 = recode_factor(
-        DENTCK53,
-        `-15` = 'Cannot be computed',
-        `-9` = 'Not ascertained',
-        `-8` = 'Do not know',
-        `-7` = 'Refused',
-        `-1` = 'Inapplicable',
-        `1` = 'Twice a year or more',
-        `2` = 'Once a year',
-        `3` = 'Less than once a year',
-        `4` = 'Never go to dentist'
-      ) %>%
-        fct_collapse(
-          `Once a year or more` = c(
-            'Once a year',
-            'Twice a year or more'
-          ),
-          `Less than once a year` = c(
-            'Less than once a year',
-            'Never go to dentist'
-          )
-        ),
+      # DENTCK53 = recode_factor(
+      #   DENTCK53,
+      #   `-15` = 'Cannot be computed',
+      #   `-9` = 'Not ascertained',
+      #   `-8` = 'Do not know',
+      #   `-7` = 'Refused',
+      #   `-1` = 'Inapplicable',
+      #   `1` = 'Twice a year or more',
+      #   `2` = 'Once a year',
+      #   `3` = 'Less than once a year',
+      #   `4` = 'Never go to dentist'
+      # ) %>%
+      #   fct_collapse(
+      #     `Once a year or more` = c(
+      #       'Once a year',
+      #       'Twice a year or more'
+      #     ),
+      #     `Less than once a year` = c(
+      #       'Less than once a year',
+      #       'Never go to dentist'
+      #     )
+      #   ),
       SEX = recode_factor(SEX,
                           `1` = 'Male',
-                          `2` = 'Female')
+                          `2` = 'Female'),
+      across(
+        starts_with('INSCOV'),
+        ~ recode_factor(
+          .x,
+          `1` = 'Any private',
+          `2` = 'Public only',
+          `3` = 'Uninsured'
+        )
+      ),
 
+      across(
+        starts_with(c('MCDEV', 'MCREV', 'GVAEV', 'GVBEV', 'GVCEV', 'OPAEV', 'OPBEV',
+                      'PRVE', 'TRIEV')),
+        ~ recode_factor(.x,
+          `1` = 'YES',
+          `2` = 'NO'
+        )
+      )
 
     )
 
-  dat$RACETHNX[dat$RACEX == 'White'] <- 'White/Not Hispanic'
-  return(dat)
+  temp_dat$RACETHNX[temp_dat$RACEX == 'White'] <- 'White/Not Hispanic'
+  return(temp_dat)
 }
 
 # Need to coalesce some of the columns to fill out values
@@ -439,10 +468,18 @@ coalesceData <- function(dat) {
       AGE_all = coalesce(!!!select(., starts_with('AGE'))),
       RACE_all = coalesce(!!!select(., RACETHNX, RACETHX)),
       CHOL_all = coalesce(!!!select(., CHOLCK53, starts_with('DSCH'))),
-      FLU_all = coalesce(!!!select(., FLUSHT53, starts_with('DSFL'))),
-      DENT_all = coalesce(!!!select(., DENTCK53, ends_with('DVTOT'))),
+      FLU_all = coalesce(!!!select(., starts_with('DSFL'))),
+      DENT_all = coalesce(!!!select(., ends_with('DVTOT'))),
       FEET_all = coalesce(!!!select(., DSCKFT53, starts_with('DSFT'))),
-
+      MEDICAID = coalesce(!!!select(., starts_with('MCDEV'))),
+      MEDICARE = coalesce(!!!select(., starts_with('MCREV'))),
+      GVAEV_all = coalesce(!!!select(., starts_with('GVAEV'))),
+      GVBEV_all = coalesce(!!!select(., starts_with('GVBEV'))),
+      GVCEV_all = coalesce(!!!select(., starts_with('GVCEV'))),
+      OPAEV_all = coalesce(!!!select(., starts_with('OPAEV'))),
+      OPBEV_all = coalesce(!!!select(., starts_with('OPBEV'))),
+      PRVEV_all = coalesce(!!!select(., starts_with('PRVEV'))),
+      TRIEV_all = coalesce(!!!select(., starts_with('TRIEV'))),
     ) %>%
     mutate(
       AGE_all = as.factor(case_when(
@@ -457,8 +494,29 @@ coalesceData <- function(dat) {
     ) %>%
     filter(AGE_all != 'Less than 18') %>% # Need to drop this factor level, throwing errors
     filter(REGION_all != 'Inapplicable') %>%
-    mutate(AGE_all = forcats::fct_drop(AGE_all),
-           REGION_all = forcats::fct_drop(REGION_all))
+    mutate(
+      AGE_all = forcats::fct_drop(AGE_all),
+      REGION_all = forcats::fct_drop(REGION_all),
+      INSCOV_old = INSCOV_all,
+      INSCOV_all = as.factor(
+        case_when(
+          MEDICARE == 'YES' & (
+            MEDICAID %in% c('NO', NA) &
+              GVAEV_all %in% c('NO', NA) &
+              GVBEV_all %in% c('NO', NA) &
+              GVCEV_all %in% c('NO', NA) &
+              OPAEV_all %in% c('NO', NA) &
+              OPBEV_all %in% c('NO', NA) &
+              TRIEV_all %in% c('NO', NA)
+          ) ~ 'Medicare only',
+          PRVEV_all == 'YES' ~ 'Private only',
+          MEDICAID == 'YES' ~ 'Medicaid',
+
+          INSCOV_old == 'Uninsured' ~ 'Uninsured',
+          TRUE ~ 'Other'
+        )
+      )
+    )
 }
 
 relevelFactors <- function(dat) {
@@ -469,7 +527,8 @@ relevelFactors <- function(dat) {
            FLU_all = fct_relevel(FLU_all, 'Within last year', 'Within last 2 or more years', 'NO', 'Not ascertained', 'Do not know', 'Refused', 'Inapplicable', 'Cannot be computed'),
            DENT_all = fct_relevel(DENT_all, 'Once a year or more', 'Less than once a year', 'Not ascertained', 'Do not know', 'Refused', 'Inapplicable'),
            DSA1C53 = fct_relevel(DSA1C53, '2 or more A1C tests in a year', 'Less than 2 or more A1C tests in a year', 'Not ascertained', 'Do not know', 'Inapplicable', 'Cannot be computed'),
-           POVCAT_all = fct_relevel(POVCAT_all, 'High income', 'Middle income', 'Low income', 'Poor/Negative')
+           POVCAT_all = fct_relevel(POVCAT_all, 'High income', 'Middle income', 'Low income', 'Poor/Negative'),
+           INSCOV_all = fct_relevel(INSCOV_all, 'Private only', 'Private & Medicare', 'Private & Medicaid', 'Public only', 'Medicaid', 'Medicare', 'Uninsured')
            ) %>%
     as_tibble()
 }
@@ -1085,8 +1144,8 @@ joinPointRegression <- function(data) {
   run_opt <- run_options(
     model = "ln",
     min_joinpoints = 0,
-    max_joinpoints = 1,
-    n_cores = 1,
+    max_joinpoints = 3,
+    n_cores = 3,
     het_error = 'constant variance',
     dependent_variable_type = 'proportion'
   )

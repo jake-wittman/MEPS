@@ -83,6 +83,8 @@ list(
       DSA1C53,
       DSCKFT53,
       PERWT,
+      MEDICAID,
+      MEDICARE
     ) %>%
       mutate(year = as.numeric(str_extract(year, '[0-9]{4}'))) %>%
       filter(year >= 2008),
@@ -100,101 +102,101 @@ list(
 # Calculate proportions ---------------------------------------------------
 
 
-  tar_target(
-    overall,
-    calcProp(diab_list, years, NULL),
-    pattern = map(diab_list, years)
-  ),
-  tar_target(
-    sex,
-    calcProp(diab_list, years, 'SEX'),
-    pattern = map(diab_list, years)
-  ),
-  tar_target(
-    race,
-    calcProp(diab_list, years, 'RACE_all'),
-    pattern = map(diab_list, years)
-  ),
-  tar_target(
-    edu,
-    calcProp(diab_list, years, 'HIDEG_all'),
-    pattern = map(diab_list, years)
-  ),
-  tar_target(
-    ages,
-    calcProp(diab_list, years, "AGE_all"),
-    pattern = map(diab_list, years)
-  ),
-  tar_target(
-    pov,
-    calcProp(diab_list, years, 'POVCAT_all'),
-    pattern = map(diab_list, years)
-  ),
-  tar_target(
-    region,
-    calcProp(diab_list, years, 'REGION_all'),
-    pattern = map(diab_list, years)
-  ),
-  tar_target(
-    insurance,
-    calcProp(diab_list, years, 'INSCOV_all'),
-    pattern = map(diab_list, years)
-    ),
-  tar_target(dash_files,
-             list.files(
-               here::here('data', 'dashboard'), full.names = TRUE
-             )),
+  # tar_target(
+  #   overall,
+  #   calcProp(diab_list, years, NULL),
+  #   pattern = map(diab_list, years)
+  # ),
+  # tar_target(
+  #   sex,
+  #   calcProp(diab_list, years, 'SEX'),
+  #   pattern = map(diab_list, years)
+  # ),
+  # tar_target(
+  #   race,
+  #   calcProp(diab_list, years, 'RACE_all'),
+  #   pattern = map(diab_list, years)
+  # ),
+  # tar_target(
+  #   edu,
+  #   calcProp(diab_list, years, 'HIDEG_all'),
+  #   pattern = map(diab_list, years)
+  # ),
+  # tar_target(
+  #   ages,
+  #   calcProp(diab_list, years, "AGE_all"),
+  #   pattern = map(diab_list, years)
+  # ),
+  # tar_target(
+  #   pov,
+  #   calcProp(diab_list, years, 'POVCAT_all'),
+  #   pattern = map(diab_list, years)
+  # ),
+  # tar_target(
+  #   region,
+  #   calcProp(diab_list, years, 'REGION_all'),
+  #   pattern = map(diab_list, years)
+  # ),
+  # tar_target(
+  #   insurance,
+  #   calcProp(diab_list, years, 'INSCOV_all'),
+  #   pattern = map(diab_list, years)
+  #   ),
+
 
 # Get Dashboard data ------------------------------------------------------
 
-
-  tar_target(dash_file_names, str_extract(list.files(
-    here::here('data', 'dashboard')
-  ), '^([^.])+')),
-  tar_target(
-    dash_list,
-    map(
-      dash_files,
-      ~ read_csv(
-        .x,
-        skip = 2,
-        col_names = TRUE,
-        n_max = 21,
-        col_types = c('dcddd'),
-        na = c('Suppressed', 'No Data')
-      )
-    ) %>%
-      setNames(dash_file_names)
-  ),
-  tar_target(
-    dash_dat,
-    bind_rows(dash_list, .id = 'file_name') %>%
-      separate(
-        file_name,
-        into = c('indicator', 'stratifier', 'strata'),
-        sep = "_"
-      ) %>%
-      janitor::clean_names() %>%
-      mutate(across(percentage:upper_limit, ~ .x / 100))
-  ),
-  tar_target(overall_indicator,
-             combineOverall(overall, dash_dat)),
-  tar_target(sex_indicator,
-             combineSex(sex, dash_dat)),
-  tar_target(race_indicator,
-             combineRace(race, dash_dat)),
-  tar_target(edu_indicator,
-             combineEdu(edu, dash_dat)),
+# tar_target(dash_files,
+#            list.files(
+#              here::here('data', 'dashboard'), full.names = TRUE
+#            )),
+  # tar_target(dash_file_names, str_extract(list.files(
+  #   here::here('data', 'dashboard')
+  # ), '^([^.])+')),
+  # tar_target(
+  #   dash_list,
+  #   map(
+  #     dash_files,
+  #     ~ read_csv(
+  #       .x,
+  #       skip = 2,
+  #       col_names = TRUE,
+  #       n_max = 21,
+  #       col_types = c('dcddd'),
+  #       na = c('Suppressed', 'No Data')
+  #     )
+  #   ) %>%
+  #     setNames(dash_file_names)
+  # ),
+  # tar_target(
+  #   dash_dat,
+  #   bind_rows(dash_list, .id = 'file_name') %>%
+  #     separate(
+  #       file_name,
+  #       into = c('indicator', 'stratifier', 'strata'),
+  #       sep = "_"
+  #     ) %>%
+  #     janitor::clean_names() %>%
+  #     mutate(across(percentage:upper_limit, ~ .x / 100))
+  # ),
+  # tar_target(overall_indicator,
+  #            combineOverall(overall, dash_dat)),
+  # tar_target(sex_indicator,
+  #            combineSex(sex, dash_dat)),
+  # tar_target(race_indicator,
+  #            combineRace(race, dash_dat)),
+  # tar_target(edu_indicator,
+  #            combineEdu(edu, dash_dat)),
   # tar_target(age_indicator,
   #            combineEdu(age, dash_dat)),
-  tar_target(overall_trend,
-             plotTrends(overall_indicator, NULL)),
-  tar_target(sex_trend,
-             plotTrends(sex_indicator, strata = 'SEX')),
-  tar_target(race_trend,
-             plotTrends(race_indicator, strata = 'RACE_all')),
-  tar_target(edu_trend,
-             plotTrends(edu_indicator, strata = 'HIDEG_all')),
+  # tar_target(overall_trend,
+  #            plotTrends(overall_indicator, NULL)),
+  # tar_target(sex_trend,
+  #            plotTrends(sex_indicator, strata = 'SEX')),
+  # tar_target(race_trend,
+  #            plotTrends(race_indicator, strata = 'RACE_all')),
+  # tar_target(edu_trend,
+  #            plotTrends(edu_indicator, strata = 'HIDEG_all')),
   # tar_target(age_trend,
   #            plotTrends(edu_indicator, strata = 'AGE_all')),
 
@@ -211,108 +213,108 @@ list(
         nest = TRUE
       )
   ),
-  tar_target(
-    giant_table,
-    createTable(diab_all_srvy, by = 'year')
-    ),
-  tar_target(
-    yearly_tables,
-    diab_list %>%
-      as_survey_design(
-        ids = VARPSU_all,
-        weights = DIABW,
-        strata = VARSTR_all,
-        nest = TRUE
-      ) %>%
-      createTable(., by = NULL),
-    pattern = map(diab_list),
-    iteration = 'list'
-  ),
-  tar_target(
-    sex_table,
-    diab_list %>%
-      as_survey_design(
-        ids = VARPSU_all,
-        weights = DIABW,
-        strata = VARSTR_all,
-        nest = TRUE
-      ) %>%
-      createTable(., by = "SEX"),
-    pattern = map(diab_list)
-  ),
-  tar_target(
-    race_table,
-    diab_list %>%
-      as_survey_design(
-        ids = VARPSU_all,
-        weights = DIABW,
-        strata = VARSTR_all,
-        nest = TRUE
-      ) %>%
-      createTable(., by = "RACE_all"),
-    pattern = map(diab_list)
-  ),
-  tar_target(
-    age_table,
-    diab_list %>%
-      as_survey_design(
-        ids = VARPSU_all,
-        weights = DIABW,
-        strata = VARSTR_all,
-        nest = TRUE
-      ) %>%
-      createTable(., by = "AGE_all"),
-    pattern = map(diab_list)
-  ),
-  tar_target(
-    edu_table,
-    diab_list %>%
-      as_survey_design(
-        ids = VARPSU_all,
-        weights = DIABW,
-        strata = VARSTR_all,
-        nest = TRUE
-      ) %>%
-      createTable(., by = "HIDEG_all"),
-    pattern = map(diab_list)
-  ),
-  tar_target(
-    pov_table,
-    diab_list %>%
-      as_survey_design(
-        ids = VARPSU_all,
-        weights = DIABW,
-        strata = VARSTR_all,
-        nest = TRUE
-      ) %>%
-      createTable(., by = "POVCAT_all"),
-    pattern = map(diab_list)
-  ),
-  tar_target(
-    region_table,
-    diab_list %>%
-      filter(!is.na(DIABW)) %>%
-      as_survey_design(
-        ids = VARPSU_all,
-        weights = DIABW,
-        strata = VARSTR_all,
-        nest = TRUE
-      ) %>%
-      createTable(., by = "REGION_all"),
-    pattern = map(diab_list)
-  ),
-  tar_target(
-    ins_table,
-    diab_list %>%
-      as_survey_design(
-        ids = VARPSU_all,
-        weights = DIABW,
-        strata = VARSTR_all,
-        nest = TRUE
-      ) %>%
-      createTable(., by = "INSCOV_all"),
-    pattern = map(diab_list)
-  ),
+  # tar_target(
+  #   giant_table,
+  #   createTable(diab_all_srvy, by = 'year')
+  #   ),
+  # tar_target(
+  #   yearly_tables,
+  #   diab_list %>%
+  #     as_survey_design(
+  #       ids = VARPSU_all,
+  #       weights = DIABW,
+  #       strata = VARSTR_all,
+  #       nest = TRUE
+  #     ) %>%
+  #     createTable(., by = NULL),
+  #   pattern = map(diab_list),
+  #   iteration = 'list'
+  # ),
+  # tar_target(
+  #   sex_table,
+  #   diab_list %>%
+  #     as_survey_design(
+  #       ids = VARPSU_all,
+  #       weights = DIABW,
+  #       strata = VARSTR_all,
+  #       nest = TRUE
+  #     ) %>%
+  #     createTable(., by = "SEX"),
+  #   pattern = map(diab_list)
+  # ),
+  # tar_target(
+  #   race_table,
+  #   diab_list %>%
+  #     as_survey_design(
+  #       ids = VARPSU_all,
+  #       weights = DIABW,
+  #       strata = VARSTR_all,
+  #       nest = TRUE
+  #     ) %>%
+  #     createTable(., by = "RACE_all"),
+  #   pattern = map(diab_list)
+  # ),
+  # tar_target(
+  #   age_table,
+  #   diab_list %>%
+  #     as_survey_design(
+  #       ids = VARPSU_all,
+  #       weights = DIABW,
+  #       strata = VARSTR_all,
+  #       nest = TRUE
+  #     ) %>%
+  #     createTable(., by = "AGE_all"),
+  #   pattern = map(diab_list)
+  # ),
+  # tar_target(
+  #   edu_table,
+  #   diab_list %>%
+  #     as_survey_design(
+  #       ids = VARPSU_all,
+  #       weights = DIABW,
+  #       strata = VARSTR_all,
+  #       nest = TRUE
+  #     ) %>%
+  #     createTable(., by = "HIDEG_all"),
+  #   pattern = map(diab_list)
+  # ),
+  # tar_target(
+  #   pov_table,
+  #   diab_list %>%
+  #     as_survey_design(
+  #       ids = VARPSU_all,
+  #       weights = DIABW,
+  #       strata = VARSTR_all,
+  #       nest = TRUE
+  #     ) %>%
+  #     createTable(., by = "POVCAT_all"),
+  #   pattern = map(diab_list)
+  # ),
+  # tar_target(
+  #   region_table,
+  #   diab_list %>%
+  #     filter(!is.na(DIABW)) %>%
+  #     as_survey_design(
+  #       ids = VARPSU_all,
+  #       weights = DIABW,
+  #       strata = VARSTR_all,
+  #       nest = TRUE
+  #     ) %>%
+  #     createTable(., by = "REGION_all"),
+  #   pattern = map(diab_list)
+  # ),
+  # tar_target(
+  #   ins_table,
+  #   diab_list %>%
+  #     as_survey_design(
+  #       ids = VARPSU_all,
+  #       weights = DIABW,
+  #       strata = VARSTR_all,
+  #       nest = TRUE
+  #     ) %>%
+  #     createTable(., by = "INSCOV_all"),
+  #   pattern = map(diab_list)
+  # ),
   # Make tables to get proportions and other relevant stats, then age adjust the proportions
 
 # Age adjusted stats ------------------------------------------------------
@@ -566,94 +568,94 @@ list(
 # Some other tables? ------------------------------------------------------
 
 
-  tar_target(
-    overall_joined,
-    joinTables(overall_indicator, yearly_table_all_stats)
-  ),
-  tar_target(
-    sex_joined,
-    joinTables(sex_indicator, sex_all_stats, variable = 'sex')
-  ),
-  tar_target(
-    race_joined,
-    joinTables(race_indicator, race_all_stats, variable = 'race')
-  ),
-  tar_target(
-    edu_joined,
-    joinTables(edu_indicator, edu_all_stats, variable = 'edu')
-  ),
+  # tar_target(
+  #   overall_joined,
+  #   joinTables(overall_indicator, yearly_table_all_stats)
+  # ),
+  # tar_target(
+  #   sex_joined,
+  #   joinTables(sex_indicator, sex_all_stats, variable = 'sex')
+  # ),
+  # tar_target(
+  #   race_joined,
+  #   joinTables(race_indicator, race_all_stats, variable = 'race')
+  # ),
+  # tar_target(
+  #   edu_joined,
+  #   joinTables(edu_indicator, edu_all_stats, variable = 'edu')
+  # ),
   # tar_target(
   #   age_joined,
   #   joinTables(age_indicator, age_all_stats, variable = 'age')
   # ),
-  tar_target(
+
 
 # Check suppression -------------------------------------------------------
 
-
-    overall_suppressed,
-    suppressData(overall_joined)
-  ),
-  tar_target(
-    sex_suppressed,
-    suppressData(sex_joined)
-  ),
-  tar_target(
-    race_suppressed,
-    suppressData(race_joined)
-  ),
-  tar_target(
-    edu_suppressed,
-    suppressData(edu_joined)
-  ),
-  tar_target(overall_trend_suppressed,
-             plotTrends(overall_suppressed, NULL)),
-  tar_target(sex_trend_suppressed,
-             plotTrends(sex_suppressed, strata = 'SEX')),
-  tar_target(race_trend_suppressed,
-             plotTrends(race_suppressed, strata = 'RACE_all')),
-  tar_target(edu_trend_suppressed,
-             plotTrends(edu_suppressed, strata = 'HIDEG_all')),
-  tar_target(overall_focus,
-             overall_suppressed %>%
-               dplyr::filter(variable %in% c('a1c', 'eye-exam', 'flu', 'foot'),
-                             value %in% c(
-                               'Within last year',
-                               '2 or more A1C tests in a year',
-                               '1 or more foot examinations in a year',
-                               'Once a year',
-                               'YES'
-                             ))),
-  tar_target(sex_focus,
-             sex_suppressed%>%
-               dplyr::filter(variable %in% c('a1c', 'eye-exam', 'flu', 'foot'),
-                             value %in% c(
-                               'Within last year',
-                               '2 or more A1C tests in a year',
-                               '1 or more foot examinations in a year',
-                               'Once a year',
-                               'YES'
-                             ))),
-  tar_target(race_focus,
-             race_suppressed%>%
-               dplyr::filter(variable %in% c('a1c', 'eye-exam', 'flu', 'foot'),
-                             value %in% c(
-                               'Within last year',
-                               '2 or more A1C tests in a year',
-                               '1 or more foot examinations in a year',
-                               'Once a year',
-                               'YES'
-                             ))),
-  tar_target(edu_focus,
-             edu_suppressed %>%
-               dplyr::filter(variable %in% c('a1c', 'eye-exam', 'flu', 'foot'),
-                             value %in% c(
-                               'Within last year',
-                               '2 or more A1C tests in a year',
-                               '1 or more foot examinations in a year',
-                               'Once a year',
-                               'YES'
-                             ))),
+  # tar_target(
+  #   overall_suppressed,
+  #   suppressData(overall_joined)
+  # ),
+  # tar_target(
+  #   sex_suppressed,
+  #   suppressData(sex_joined)
+  # ),
+  # tar_target(
+  #   race_suppressed,
+  #   suppressData(race_joined)
+  # ),
+  # tar_target(
+  #   edu_suppressed,
+  #   suppressData(edu_joined)
+  # ),
+  # tar_target(overall_trend_suppressed,
+  #            plotTrends(overall_suppressed, NULL)),
+  # tar_target(sex_trend_suppressed,
+  #            plotTrends(sex_suppressed, strata = 'SEX')),
+  # tar_target(race_trend_suppressed,
+  #            plotTrends(race_suppressed, strata = 'RACE_all')),
+  # tar_target(edu_trend_suppressed,
+  #            plotTrends(edu_suppressed, strata = 'HIDEG_all')),
+  # tar_target(overall_focus,
+  #            overall_suppressed %>%
+  #              dplyr::filter(variable %in% c('a1c', 'eye-exam', 'flu', 'foot'),
+  #                            value %in% c(
+  #                              'Within last year',
+  #                              '2 or more A1C tests in a year',
+  #                              '1 or more foot examinations in a year',
+  #                              'Once a year',
+  #                              'YES'
+  #                            ))),
+  # tar_target(sex_focus,
+  #            sex_suppressed%>%
+  #              dplyr::filter(variable %in% c('a1c', 'eye-exam', 'flu', 'foot'),
+  #                            value %in% c(
+  #                              'Within last year',
+  #                              '2 or more A1C tests in a year',
+  #                              '1 or more foot examinations in a year',
+  #                              'Once a year',
+  #                              'YES'
+  #                            ))),
+  # tar_target(race_focus,
+  #            race_suppressed%>%
+  #              dplyr::filter(variable %in% c('a1c', 'eye-exam', 'flu', 'foot'),
+  #                            value %in% c(
+  #                              'Within last year',
+  #                              '2 or more A1C tests in a year',
+  #                              '1 or more foot examinations in a year',
+  #                              'Once a year',
+  #                              'YES'
+  #                            ))),
+  # tar_target(edu_focus,
+  #            edu_suppressed %>%
+  #              dplyr::filter(variable %in% c('a1c', 'eye-exam', 'flu', 'foot'),
+  #                            value %in% c(
+  #                              'Within last year',
+  #                              '2 or more A1C tests in a year',
+  #                              '1 or more foot examinations in a year',
+  #                              'Once a year',
+  #                              'YES'
+  #                            ))),
 
 # Age adjust preventive practices ------------------------------------
   tar_target(
@@ -897,13 +899,206 @@ tar_target(
 tar_target(
   jp_proportion_plot_data,
   map(jp_regressions_proportions, ~.x$data_export %>%
-        mutate(apc = as.character(apc))) %>%
+        mutate(apc = as.character(apc),
+               model = as.character(model),
+               joinpoints = as.character(joinpoints),
+               final_selected_model = as.character(final_selected_model))) %>%
     map2(., names(.), ~.x %>%
             mutate(stratifier.practice = .y)) %>%
     bind_rows() %>%
     separate(stratifier.practice, c('stratifier', 'variable'), sep = '[.]') %>%
     ungroup()
+),
+
+# Joinpoint without 2020 --------------------------------------------------
+tar_target(
+  jp_regressions_proportions_sans_2020,
+  age_adjusted_stats %>%
+    filter(strata != 'Total') %>%
+    filter(strata != 'Not available') %>%
+    filter(strata != 'Other Race/Not Hispanic') %>%
+    filter(year <= 2019) %>%
+    mutate(variable_text = case_when(variable == 'a1c' ~ '2 or more A1C tests',
+                                     variable == 'CHOL_all' ~ 'Cholesterol tested',
+                                     variable == 'DENT_all' ~ '1 or more dentist visits',
+                                     variable == 'eye-exam' ~ 'Eye exam with dilation',
+                                     variable == 'flu' ~ 'Received flu vaccine',
+                                     variable == 'foot' ~ 'Foot examination'),
+           strata = case_when(strata == 'stat_0' ~ 'Overall',
+                              TRUE ~ strata)) %>%
+    mutate(strata = as.factor(strata),
+           year_adj = year - 2007) %>%
+    split(., f = ~.$stratifier + .$variable) %>%
+    map(., ~joinPointRegression(.x))
+),
+tar_target(
+  jp_regressions_preventive_sans_2020,
+  age_adjusted_preventive %>%
+    filter(strata != 'Total') %>%
+    filter(strata != 'Not available') %>%
+    filter(strata != 'Other Race/Not Hispanic') %>%
+    filter(year <= 2019) %>%
+    mutate(variable_text = case_when(variable == 'a1c' ~ '2 or more A1C tests',
+                                     variable == 'CHOL_all' ~ 'Cholesterol tested',
+                                     variable == 'DENT_all' ~ '1 or more dentist visits',
+                                     variable == 'eye-exam' ~ 'Eye exam with dilation',
+                                     variable == 'flu' ~ 'Received flu vaccine',
+                                     variable == 'foot' ~ 'Foot examination'),
+           strata = case_when(strata == 'stat_0' ~ 'Overall',
+                              TRUE ~ strata)) %>%
+    mutate(strata = as.factor(strata),
+           year_adj = year - 2007) %>%
+    split(., f = ~.$stratifier + .$variable) %>%
+    map(., ~joinPointRegression(.x))
+),
+tar_target(
+  jp_proportion_lines_sans_2020,
+  map2(jp_regressions_proportions_sans_2020, names(jp_regressions_proportions_sans_2020), function(.x, .y) {
+    .x$report %>%
+      mutate(group.practice = .y)
+  }) %>%
+    bind_rows() %>%
+    separate(group.practice, c('stratifier', 'practice'), sep = '[.]') %>%
+    mutate(strata = case_when(stratifier == 'overall' ~ 'stat_0',
+                              TRUE ~ strata)) %>%
+    mutate(stratifier = factor(stratifier,
+                               c('overall', 'age', 'sex', 'race', 'edu', 'insurance', 'poverty')),
+           strata = case_when(strata == 'stat_0' ~ '-',
+                              strata == 'Greater than HS' ~ 'Greater than high school',
+                              TRUE ~ strata)) %>%
+    mutate(strata = as.factor(strata)) %>%
+    mutate(stratifier = recode_factor(
+      stratifier,
+      overall = 'Overall',
+      age = 'Age',
+      sex = 'Sex',
+      race = 'Race/Ethnicity',
+      edu = 'Highest degree earned',
+      insurance = 'Insurance coverage',
+      poverty = 'Poverty level'
+    ))
+),
+tar_target(
+  jp_prevention_aapc_sans_2020,
+  map(jp_regressions_preventive_sans_2020, function(.x, .y) {
+    .x$aapc
+  }) %>%
+    bind_rows(.id = 'group.practice') %>%
+    filter(str_detect(group.practice, 'atleast_three')) %>%
+    separate(group.practice, c('stratifier', 'practice'), sep = '[.]') %>%
+    mutate(strata = case_when(stratifier == 'overall' ~ 'stat_0',
+                              TRUE ~ strata)) %>%
+    mutate(stratifier = factor(stratifier,
+                               c('overall', 'age', 'sex', 'race', 'edu', 'insurance', 'poverty')),
+           strata = case_when(strata == 'stat_0' ~ '-',
+                              strata == 'Greater than HS' ~ 'Greater than high school',
+                              TRUE ~ strata)) %>%
+    mutate(strata = as.factor(strata)) %>%
+    mutate(stratifier = recode_factor(
+      stratifier,
+      overall = 'Overall',
+      age = 'Age',
+      sex = 'Sex',
+      race = 'Race/Ethnicity',
+      edu = 'Highest degree earned',
+      insurance = 'Insurance coverage',
+      poverty = 'Poverty level'
+    ))
+),
+tar_target(
+  jp_prevention_apc_sans_2020,
+  map(jp_regressions_preventive_sans_2020, function(.x, .y) {
+    .x$apc
+  }) %>%
+    bind_rows(.id = 'group.practice') %>%
+    filter(str_detect(group.practice, 'atleast_three')) %>%
+    separate(group.practice, c('stratifier', 'practice'), sep = '[.]') %>%
+    mutate(strata = case_when(stratifier == 'overall' ~ 'stat_0',
+                              TRUE ~ strata)) %>%
+    mutate(stratifier = factor(stratifier,
+                               c('overall', 'age', 'sex', 'race', 'edu', 'insurance', 'poverty')),
+           strata = case_when(strata == 'stat_0' ~ '-',
+                              strata == 'Greater than HS' ~ 'Greater than high school',
+                              TRUE ~ strata)) %>%
+    mutate(strata = as.factor(strata)) %>%
+    mutate(stratifier = recode_factor(
+      stratifier,
+      overall = 'Overall',
+      age = 'Age',
+      sex = 'Sex',
+      race = 'Race/Ethnicity',
+      edu = 'Highest degree earned',
+      insurance = 'Insurance coverage',
+      poverty = 'Poverty level'
+    ))
+),
+tar_target(
+  jp_proportion_plot_data_sans_2020,
+  map(jp_regressions_proportions_sans_2020, ~.x$data_export %>%
+        mutate(apc = as.character(apc),
+               model = as.character(model),
+               joinpoints = as.character(joinpoints),
+               final_selected_model = as.character(final_selected_model))) %>%
+    map2(., names(.), ~.x %>%
+           mutate(stratifier.practice = .y)) %>%
+    bind_rows() %>%
+    separate(stratifier.practice, c('stratifier', 'variable'), sep = '[.]') %>%
+    ungroup()
+),
+tar_target(
+  jp_proportion_aapc_sans_2020,
+  map(jp_regressions_proportions_sans_2020, function(.x, .y) {
+    .x$aapc
+  }) %>%
+    bind_rows(.id = 'group.practice') %>%
+    separate(group.practice, c('stratifier', 'practice'), sep = '[.]') %>%
+    mutate(strata = case_when(stratifier == 'overall' ~ 'stat_0',
+                              TRUE ~ strata)) %>%
+    mutate(stratifier = factor(stratifier,
+                               c('overall', 'age', 'sex', 'race', 'edu', 'insurance', 'poverty')),
+           strata = case_when(strata == 'stat_0' ~ '-',
+                              strata == 'Greater than HS' ~ 'Greater than high school',
+                              TRUE ~ strata)) %>%
+    mutate(strata = as.factor(strata)) %>%
+    mutate(stratifier = recode_factor(
+      stratifier,
+      overall = 'Overall',
+      age = 'Age',
+      sex = 'Sex',
+      race = 'Race/Ethnicity',
+      edu = 'Highest degree earned',
+      insurance = 'Insurance coverage',
+      poverty = 'Poverty level'
+    ))
+),
+tar_target(
+  jp_proportion_apc_sans_2020,
+  map(jp_regressions_proportions_sans_2020, function(.x, .y) {
+    .x$apc
+  }) %>%
+    bind_rows(.id = 'group.practice') %>%
+    separate(group.practice, c('stratifier', 'practice'), sep = '[.]') %>%
+    mutate(strata = case_when(stratifier == 'overall' ~ 'stat_0',
+                              TRUE ~ strata)) %>%
+    mutate(stratifier = factor(stratifier,
+                               c('overall', 'age', 'sex', 'race', 'edu', 'insurance', 'poverty')),
+           strata = case_when(strata == 'stat_0' ~ '-',
+                              strata == 'Greater than HS' ~ 'Greater than high school',
+                              TRUE ~ strata)) %>%
+    mutate(strata = as.factor(strata)) %>%
+    mutate(stratifier = recode_factor(
+      stratifier,
+      overall = 'Overall',
+      age = 'Age',
+      sex = 'Sex',
+      race = 'Race/Ethnicity',
+      edu = 'Highest degree earned',
+      insurance = 'Insurance coverage',
+      poverty = 'Poverty level'
+    ))
 )
+
+
 )
 
 

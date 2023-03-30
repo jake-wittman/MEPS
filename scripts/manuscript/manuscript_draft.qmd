@@ -4,7 +4,7 @@ format:
   docx:
     page-width: 10
     reference-doc: template.docx
-editor: visual
+editor: source
 bibliography: references.bib
 csl: ama.csl
 execute:
@@ -31,6 +31,8 @@ library(gt)
 library(grateful)
 # To just make a bibtex file
 # get_pkgs_info(pkgs = c('gtsummary', 'patchwork', 'gt', 'gtsummary'))
+ggplot2::theme_update(text = element_text(family = 'Arial')) # I think this sets default plot font to Arial. May also try
+# family = sans
 
 `%!in%` <- Negate(`%in%`)
 sigfig <- function(number, digits) {
@@ -43,11 +45,18 @@ specifyDecimal <- function(x, digits) trimws(format(round(x, digits), nsmall=dig
 
 # For pulling specifically from the preventive table since the column name I use is
 # weird and doesn't like being bang-bang-banged.
-pullNumber <- function(data, filter.by, column) {
-  data %>% 
+pullNumber <- function(data, filter.by, column, brackets = FALSE) {
+  out <- data %>% 
     filter(` ` == filter.by) %>% 
     select(!!!column) %>% 
-    pull()
+    pull() 
+  out <- gsub("\\(", "(95% CI: ", out)
+  if (brackets == TRUE) {
+    out <- out %>% 
+    str_replace("\\(", "\\[") %>% 
+    str_replace("\\)", "\\]")
+  }
+  out
 }
 # For other tables that don't use such weird column names
 pullNumber2 <- function(data, filter.column, filter.by, select.column) {
@@ -56,9 +65,17 @@ pullNumber2 <- function(data, filter.column, filter.by, select.column) {
     select(!!!column) %>% 
     pull()
 }
+
+# Some numbers pulled from MEPS page:
+sample_size_response_rate <- tibble(
+  year = 2020:2008,
+  n = c(26847, 27648, 29415, 30716, 33259, 33893, 33162, 35068, 37182, 33622, 31228, 34920, 31262),
+  full_year_response = c(27.6, 39.5, 42.7, 44.2, 46.0, 47.7, 48.5, 52.8, 56.3, 54.9, 53.5, 57.2, 59.3)
+)
+
 ```
 
-```{r}
+```{r preventive-table}
 
 tar_load(c(jp_prevention_apc,
            jp_prevention_aapc,
@@ -72,7 +89,7 @@ cleaned_jp_aapc <- jp_prevention_aapc %>%
   select(-aapc_index) %>% 
   mutate(aapc = specifyDecimal(aapc, digits = 1),
         across(starts_with('aapc_'),
-                ~specifyDecimal(x = .x, digits = 2)),
+                ~specifyDecimal(x = .x, digits = 1)),
          across(starts_with('aapc'),
                 ~case_when(.x == ' NA' ~ NA_character_,
                            TRUE ~ .x)),
@@ -104,7 +121,7 @@ cleaned_jp_apc <- jp_prevention_apc %>%
          across(starts_with('apc_0') | starts_with('apc_1') | starts_with('p_'),
                 ~specifyDecimal(.x, digits = 1)),
          across(contains('cl'),
-                ~specifyDecimal(.x, digits = 2)),
+                ~specifyDecimal(.x, digits = 1)),
          across(starts_with('apc') | starts_with('p_'),
                 ~case_when(.x == 'NA' ~ NA_character_,
                            TRUE ~ .x))) %>% 
@@ -123,12 +140,12 @@ cleaned_jp_apc <- jp_prevention_apc %>%
 # Clean up the age adjusted preventive practices and then join with the aapc table
 clean_age_adjusted <- age_adjusted_preventive %>% 
   # Filter to just the >=3 practices
-  filter(label == 'At least three preventive practices followed') %>% 
+  filter(variable == 'zero_practices') %>% 
   # Filter down to every other year
-  filter(year %in% seq(2000, 2020, by = 2)) %>% 
+  filter(year %in% seq(2000, 2020, by = 1)) %>% 
   mutate(chr_age_adj_prop = sigfig(p, digits = 3),
          p.std.error = p.std.error * 100,
-         age_adjusted_se_perc = sigfig(p.std.error, digits = 3),
+         age_adjusted_se_perc = sigfig(p.std.error, digits = 2),
          percentage = glue::glue('{chr_age_adj_prop} ({age_adjusted_se_perc})')) %>% 
   pivot_wider(
     id_cols = c(stratifier, variable, label, strata),
@@ -148,8 +165,8 @@ clean_age_adjusted <- age_adjusted_preventive %>%
          perc_change_lcl = percent_change - 1.96 * percent_change_se,
          perc_change_ucl = percent_change + 1.96 * percent_change_se,
          perc_change_char = specifyDecimal(percent_change, digits = 1),
-         perc_change_lcl_char = specifyDecimal(perc_change_lcl, digits = 2),
-         perc_change_ucl_char = specifyDecimal(perc_change_ucl, digits = 2),
+         perc_change_lcl_char = specifyDecimal(perc_change_lcl, digits = 1),
+         perc_change_ucl_char = specifyDecimal(perc_change_ucl, digits = 1),
          `Percent Change (95% CI)` = glue::glue('{perc_change_char} ({perc_change_lcl_char}, {perc_change_ucl_char})')) %>% 
   select(-starts_with('age_adjusted_prop'), -starts_with('p.std.error'), -contains('_change_')) %>% 
   setNames(., str_replace(names(.), 'percentage_', "")) %>% 
@@ -183,6 +200,7 @@ cleaned_preventive_df <- left_join(clean_age_adjusted, cleaned_jp_apc, by = c('s
 
 # Rename strata to a blank name to remove it from the final table
 preventive_practice_table <- cleaned_preventive_df %>% 
+  filter(strata != 'Other') %>% 
   group_by(stratifier) %>%
   select(stratifier, ` ` = strata, `2008`:`2020`, `Percent Change (95% CI)`, `Joinpoint Year` = segment,
          `APC Period 1`, `APC Period 2`, `AAPC`) %>%
@@ -190,30 +208,434 @@ preventive_practice_table <- cleaned_preventive_df %>%
                                 TRUE ~ as.character(stratifier))) %>% 
   # Rename some columns to add () info
   rename(`2008 (SE)` = `2008`,
+         `2009 (SE)` = `2009`,
          `2010 (SE)` = `2010`,
+         `2011 (SE)` = `2011`,
          `2012 (SE)` = `2012`,
+         `2013 (SE)` = `2013`,
          `2014 (SE)` = `2014`,
+         `2015 (SE)` = `2015`,
          `2016 (SE)` = `2016`,
+         `2017 (SE)` = `2017`,
          `2018 (SE)` = `2018`,
+         `2019 (SE)` = `2019`,
          `2020 (SE)` = `2020`,
          `APC Period 1 (95% CI)` = `APC Period 1`,
          `APC Period 2 (95% CI)` = `APC Period 2`,
          `AAPC (95% CI)` = `AAPC`) %>% 
   gt() %>% 
   sub_missing(missing_text = ' ')
-preventive_practice_table$`_data` <- preventive_practice_table$`_data`[c(1:18, 20, 19, 21), ]
 
-
+# Reorganize insurance variables
+preventive_practice_table$`_data` <- preventive_practice_table$`_data`[c(1:14, 15, 18, 16, 17, 19:22), ]
 tab1 <- preventive_practice_table$`_data`
 ```
 
-```{r}
+```{r preventive-table-sans-2020}
+tar_load(ends_with('sans_2020'),
+         store = here::here('_targets/'))
+# Clean up the AAPC table and get it into format for printing to table
+cleaned_jp_aapc_sans_2020 <- jp_prevention_aapc_sans_2020 %>% 
+  select(-aapc_index) %>% 
+  mutate(aapc = specifyDecimal(aapc, digits = 1),
+        across(starts_with('aapc_'),
+                ~specifyDecimal(x = .x, digits = 1)),
+         across(starts_with('aapc'),
+                ~case_when(.x == ' NA' ~ NA_character_,
+                           TRUE ~ .x)),
+         AAPC = case_when(!is.na(aapc) ~ glue::glue('{aapc} ({aapc_c_i_low}, {aapc_c_i_high})'),
+                          TRUE ~ NA_character_)) %>%
+  select(stratifier, strata, AAPC)
+
+# Format APC table for future joining
+cleaned_jp_apc_sans_2020 <- jp_prevention_apc_sans_2020 %>% 
+  # No model has more than a single joinpoint, so make wider and then
+  # remove the excess columns to determine if there's no join point (segmend_end = 2020)
+  # or a joinpoint (segment_end != 2019)
+  pivot_wider(id_cols = c(stratifier, strata, model),
+              names_from = segment,
+              values_from = c(segment_start, segment_end, apc, p_value, apc_significant,
+                              apc_95_lcl, apc_95_ucl)
+  ) %>% 
+  select(-segment_start_0, -segment_start_1, -segment_end_1, -apc_significant_0, -apc_significant_1) %>% 
+  # Make segment empty if no joinpoint
+  mutate(segment = case_when(segment_end_0 == 2019 ~ NA_integer_,
+                             TRUE ~ segment_end_0)) %>% 
+  # MAke apc empty if not significant
+  mutate(across(c(apc_0, apc_95_lcl_0, apc_95_ucl_0),
+                ~ case_when(p_value_0 > 0.05 & p_value_1 > 0.05 ~ NA_real_,
+                            TRUE ~ .x)), 
+         across(c(apc_1, apc_95_lcl_1, apc_95_ucl_1),
+                ~ case_when(p_value_0 > 0.05 & p_value_1 > 0.05 ~ NA_real_,
+                            TRUE ~ .x)),
+         across(starts_with('apc_0') | starts_with('apc_1') | starts_with('p_'),
+                ~specifyDecimal(.x, digits = 1)),
+         across(contains('cl'),
+                ~specifyDecimal(.x, digits = 1)),
+         across(starts_with('apc') | starts_with('p_'),
+                ~case_when(.x == 'NA' ~ NA_character_,
+                           TRUE ~ .x))) %>% 
+  # Concatenate apc column with CI columns
+  mutate(`APC Period 1` = case_when(
+       !is.na(apc_0) ~ glue::glue('{apc_0} ({apc_95_lcl_0}, {apc_95_ucl_0})'),
+       TRUE ~ NA_character_
+                                    ),
+    `APC Period 2` = case_when(
+       !is.na(apc_1) ~ glue::glue('{apc_1} ({apc_95_lcl_1}, {apc_95_ucl_1})'),
+       TRUE ~ NA_character_
+    )
+  ) %>%
+  select(stratifier, strata, segment, starts_with('APC '))
+
+# Clean up the age adjusted preventive practices and then join with the aapc table
+clean_age_adjusted <- age_adjusted_preventive %>% 
+  # Filter to just the >=3 practices
+  filter(variable == 'zero_practices') %>% 
+  # Filter down to every other year
+  filter(year %in% seq(2000, 2020, by = 1)) %>% 
+  mutate(chr_age_adj_prop = specifyDecimal(p, digits = 1),
+         p.std.error = p.std.error * 100,
+         age_adjusted_se_perc = specifyDecimal(p.std.error, digits = 1),
+         percentage = glue::glue('{chr_age_adj_prop} ({age_adjusted_se_perc})')) %>% 
+  pivot_wider(
+    id_cols = c(stratifier, variable, label, strata),
+    names_from = year,
+    values_from = c(p, percentage, p.std.error),
+  ) %>% 
+  # Remove excess strata
+  filter(strata %!in% c('Not available', 'Other Race/Not Hispanic')) %>% 
+  # Relevel stratifier factor, clean up stratifier and strata names
+  mutate(stratifier = factor(stratifier,
+                             c('overall', 'age', 'sex', 'race', 'edu', 'insurance', 'poverty')),
+         strata = case_when(strata == 'stat_0' ~ '-', 
+                            strata == 'Greater than HS' ~ 'Greater than high school',
+                            TRUE ~ strata),
+         percent_change = ((p_2019 - p_2008) / p_2008) * 100,
+         percent_change_se = (abs(p_2019 / p_2008) * sqrt((p.std.error_2019^2 / p_2019^2) + (p.std.error_2008^2 / p_2008^2)) * 100),
+         perc_change_lcl = percent_change - 1.96 * percent_change_se,
+         perc_change_ucl = percent_change + 1.96 * percent_change_se,
+         perc_change_char = specifyDecimal(percent_change, digits = 1),
+         perc_change_lcl_char = specifyDecimal(perc_change_lcl, digits = 1),
+         perc_change_ucl_char = specifyDecimal(perc_change_ucl, digits = 1),
+         `Percent Change (95% CI)` = glue::glue('{perc_change_char} ({perc_change_lcl_char}, {perc_change_ucl_char})')) %>% 
+  select(-starts_with('age_adjusted_prop'), -starts_with('p.std.error'), -contains('_change_')) %>% 
+  setNames(., str_replace(names(.), 'percentage_', "")) %>% 
+  mutate(strata = as.factor(strata)) %>% 
+  mutate(stratifier = recode_factor(
+    stratifier,
+    overall = 'Overall',
+    age = 'Age',
+    sex = 'Sex',
+    race = 'Race/Ethnicity',
+    edu = 'Highest degree earned',
+    insurance = 'Insurance coverage',
+    poverty = 'Poverty level'
+  )) %>% 
+  # Join with AAPC table
+  left_join(cleaned_jp_aapc_sans_2020, by = c('stratifier', 'strata'))
 
 
-stats_table_plot_dat <- jp_proportion_plot_data %>% 
+
+cleaned_preventive_df_sans_2020 <- left_join(clean_age_adjusted, cleaned_jp_apc_sans_2020, by = c('stratifier', 'strata')) %>% 
+  mutate(AAPC = case_when(is.na(AAPC) & is.na(`APC Period 2`) ~ `APC Period 1`,
+                          TRUE ~ AAPC),
+         `APC Period 1` = case_when(is.na(`APC Period 1`) & is.na(`APC Period 2`) ~ AAPC,
+                                    TRUE ~ `APC Period 1`)) %>%
+  # Rename poverty levels
+  mutate(strata = case_when(as.character(strata) == 'Poor/Negative' ~ '< 100%',
+                            as.character(strata) == 'Low income' ~ '100% - 199%',
+                            as.character(strata) == 'Middle income' ~ '200% - 399%',
+                            as.character(strata) == 'High income' ~ '> 400%',
+                            TRUE ~ as.character(strata))) 
+
+# Rename strata to a blank name to remove it from the final table
+preventive_practice_table_sans_2020 <- cleaned_preventive_df_sans_2020 %>% 
+  filter(strata != 'Other') %>% 
+  group_by(stratifier) %>%
+  select(stratifier, ` ` = strata, `2008`:`2020`, `Percent Change (95% CI)`, `Joinpoint Year` = segment,
+         `APC Period 1`, `APC Period 2`, `AAPC`) %>%
+  mutate(stratifier = case_when(as.character(stratifier) == 'Poverty level' ~ 'Poverty income ratio',
+                                TRUE ~ as.character(stratifier))) %>% 
+  # Rename some columns to add () info
+  rename(`2008 (SE)` = `2008`,
+         `2009 (SE)` = `2009`,
+         `2010 (SE)` = `2010`,
+         `2011 (SE)` = `2011`,
+         `2012 (SE)` = `2012`,
+         `2013 (SE)` = `2013`,
+         `2014 (SE)` = `2014`,
+         `2015 (SE)` = `2015`,
+         `2016 (SE)` = `2016`,
+         `2017 (SE)` = `2017`,
+         `2018 (SE)` = `2018`,
+         `2019 (SE)` = `2019`,
+         `2020 (SE)` = `2020`,
+         `APC Period 1 (95% CI)` = `APC Period 1`,
+         `APC Period 2 (95% CI)` = `APC Period 2`,
+         `AAPC (95% CI)` = `AAPC`) %>% 
+  gt() %>% 
+  sub_missing(missing_text = ' ') %>% 
+  tab_footnote(
+    footnote = "Values in these columns were estimated excluding data from 2020.",
+    locations = cells_column_labels(
+      columns = c(`Percent Change (95% CI)`,
+      `APC Period 1 (95% CI)`,
+      `APC Period 2 (95% CI)`,
+      `AAPC (95% CI)`
+    ))
+  ) %>% 
+  tab_options(footnotes.marks = "a")
+# Reorganize insurance variables
+ preventive_practice_table_sans_2020$`_data` <- preventive_practice_table_sans_2020$`_data`[c(1:14, 15, 18, 16, 17, 19:22), ]
+
+
+tab_sans_2020 <- preventive_practice_table_sans_2020$`_data`
+
+```
+
+```{r proportion-table-sans-2020}
+# Clean up the AAPC table and get it into format for printing to table
+cleaned_prop_aapc_sans_2020 <- jp_proportion_aapc_sans_2020 %>% 
+  select(-aapc_index) %>% 
+  mutate(aapc = specifyDecimal(aapc, digits = 1),
+        across(starts_with('aapc_'),
+                ~specifyDecimal(x = .x, digits = 1)),
+         across(starts_with('aapc'),
+                ~case_when(.x == ' NA' ~ NA_character_,
+                           TRUE ~ .x)),
+         AAPC = case_when(!is.na(aapc) ~ glue::glue('{aapc} ({aapc_c_i_low}, {aapc_c_i_high})'),
+                          TRUE ~ NA_character_)) %>%
+  select(stratifier, strata, practice, AAPC)
+
+# Format APC table for future joining
+cleaned_prop_apc_sans_2020 <- jp_proportion_apc_sans_2020 %>% 
+  # No model has more than a single joinpoint, so make wider and then
+  # remove the excess columns to determine if there's no join point (segmend_end = 2020)
+  # or a joinpoint (segment_end != 2019)
+  pivot_wider(id_cols = c(stratifier, strata, practice, model),
+              names_from = segment,
+              values_from = c(segment_start, segment_end, apc, p_value, apc_significant,
+                              apc_95_lcl, apc_95_ucl)
+  ) %>% 
+  mutate(
+    across(
+      c(apc_0, apc_95_lcl_0, apc_95_ucl_0),
+      ~ case_when(p_value_0 > 0.05 &
+                    p_value_1 > 0.05 & p_value_2 > 0.05 & p_value_3 > 0.05 ~ NA_real_,
+                  TRUE ~ .x)
+    ),
+    across(
+      c(apc_1, apc_95_lcl_1, apc_95_ucl_1),
+      ~ case_when(p_value_0 > 0.05 &
+                    p_value_1 > 0.05 & p_value_2 > 0.05 & p_value_3 > 0.05 ~ NA_real_,
+                  TRUE ~ .x)
+    ),
+    across(
+      c(apc_2, apc_95_lcl_2, apc_95_ucl_2),
+      ~ case_when(p_value_0 > 0.05 &
+                    p_value_1 > 0.05 & p_value_2 > 0.05 & p_value_3 > 0.05 ~ NA_real_,
+                  TRUE ~ .x)
+    ),
+    across(
+      c(apc_3, apc_95_lcl_3, apc_95_ucl_3),
+      ~ case_when(p_value_0 > 0.05 &
+                    p_value_1 > 0.05 & p_value_2 > 0.05 & p_value_3 > 0.05 ~ NA_real_,
+                  TRUE ~ .x)
+    ),
+    across(
+      matches('apc_[0-9]{1}') | starts_with('p_'),
+      ~ specifyDecimal(.x, digits = 1)
+    )
+  ) %>% 
+    select(-contains('significant')) %>% 
+    mutate(across(starts_with('apc') | starts_with('p_'),
+                ~case_when(.x == 'NA' ~ NA_character_,
+                           TRUE ~ .x))) %>% 
+  # Concatenate apc column with CI columns
+  mutate(`APC Period 1` = case_when(
+       !is.na(apc_0) ~ glue::glue('{apc_0} ({apc_95_lcl_0}, {apc_95_ucl_0})'),
+       TRUE ~ NA_character_
+                                    ),
+    `APC Period 2` = case_when(
+       !is.na(apc_1) ~ glue::glue('{apc_1} ({apc_95_lcl_1}, {apc_95_ucl_1})'),
+       TRUE ~ NA_character_
+    ),
+    `APC Period 3` = case_when(
+       !is.na(apc_2) ~ glue::glue('{apc_2} ({apc_95_lcl_2}, {apc_95_ucl_2})'),
+       TRUE ~ NA_character_
+    )
+  ) %>%
+    # Make segment empty if no joinpoint
+  mutate(segment = ifelse(!is.na(segment_start_1) & !is.na(segment_start_2) & !is.na(segment_start_3), 
+                             paste(segment_start_1, segment_start_2, segment_start_3, sep = ", "),
+                             ifelse(!is.na(segment_start_1) & !is.na(segment_start_2) & is.na(segment_start_3),
+                                    paste(segment_start_1, segment_start_2, sep = ", "),
+                                    ifelse(!is.na(segment_start_1) & is.na(segment_start_2) & is.na(segment_start_3),
+                                           segment_start_1,
+                                           ifelse(segment_end_0 == 2019, NA_character_, 'Check me')
+                                           )
+                                    )
+                             )
+         ) %>% 
+  # MAke apc empty if not significant
+  select(stratifier, strata, practice, segment, starts_with('APC '), -segment_start_0, -segment_start_1, -segment_end_1)
+
+# Clean up the age adjusted preventive practices and then join with the aapc table
+clean_age_adjusted_prop <- age_adjusted_stats %>% 
+  # Filter to just the >=3 practices
+  #filter(label == 'At least three preventive practices followed') %>% 
+  # Filter down to every other year
+  filter(year %in% seq(2000, 2020, by = 1)) %>% 
+  mutate(chr_age_adj_prop = specifyDecimal(p, digits = 1),
+         p.std.error = p.std.error * 100,
+         age_adjusted_se_perc = specifyDecimal(p.std.error, digits = 1),
+         percentage = glue::glue('{chr_age_adj_prop} ({age_adjusted_se_perc})')) %>% 
+  pivot_wider(
+    id_cols = c(stratifier, variable, label, strata),
+    names_from = year,
+    values_from = c(p, percentage, p.std.error),
+  ) %>% 
+  # Remove excess strata
+  filter(strata %!in% c('Not available', 'Other Race/Not Hispanic')) %>% 
+  # Relevel stratifier factor, clean up stratifier and strata names
+  mutate(stratifier = factor(stratifier,
+                             c('overall', 'age', 'sex', 'race', 'edu', 'insurance', 'poverty')),
+         strata = case_when(strata == 'stat_0' ~ '-', 
+                            strata == 'Greater than HS' ~ 'Greater than high school',
+                            TRUE ~ strata),
+         percent_change = ((p_2019 - p_2008) / p_2008) * 100,
+         percent_change_se = (abs(p_2019 / p_2008) * sqrt((p.std.error_2019^2 / p_2019^2) + (p.std.error_2008^2 / p_2008^2)) * 100),
+         perc_change_lcl = percent_change - 1.96 * percent_change_se,
+         perc_change_ucl = percent_change + 1.96 * percent_change_se,
+         perc_change_char = specifyDecimal(percent_change, digits = 1),
+         perc_change_lcl_char = specifyDecimal(perc_change_lcl, digits = 1),
+         perc_change_ucl_char = specifyDecimal(perc_change_ucl, digits = 1),
+         `Percent Change (95% CI)` = glue::glue('{perc_change_char} ({perc_change_lcl_char}, {perc_change_ucl_char})')) %>% 
+  select(-starts_with('age_adjusted_prop'), -starts_with('p.std.error'), -contains('_change_')) %>% 
+  setNames(., str_replace(names(.), 'percentage_', "")) %>% 
+  mutate(strata = as.factor(strata)) %>% 
+  mutate(stratifier = recode_factor(
+    stratifier,
+    overall = 'Overall',
+    age = 'Age',
+    sex = 'Sex',
+    race = 'Race/Ethnicity',
+    edu = 'Highest degree earned',
+    insurance = 'Insurance coverage',
+    poverty = 'Poverty level'
+  )) %>% 
+  # Join with AAPC table
+  left_join(cleaned_prop_aapc_sans_2020, by = c('stratifier', 'strata', 'variable' = 'practice'))
+
+
+
+cleaned_proportion_df_sans_2020 <- left_join(clean_age_adjusted_prop, cleaned_prop_apc_sans_2020, by = c('stratifier', 'strata', 'variable' = 'practice')) %>% 
+  mutate(AAPC = case_when(is.na(AAPC) & is.na(`APC Period 2`) & is.na(`APC Period 3`) ~ `APC Period 1`,
+                          TRUE ~ AAPC),
+         `APC Period 1` = case_when(is.na(`APC Period 1`) & is.na(`APC Period 2`) ~ AAPC,
+                                    TRUE ~ `APC Period 1`)) %>%
+  # Rename poverty levels
+  mutate(strata = case_when(as.character(strata) == 'Poor/Negative' ~ '< 100%',
+                            as.character(strata) == 'Low income' ~ '100% - 199%',
+                            as.character(strata) == 'Middle income' ~ '200% - 399%',
+                            as.character(strata) == 'High income' ~ '> 400%',
+                            TRUE ~ as.character(strata))) 
+
+# Rename strata to a blank name to remove it from the final table
+proportion_table_sans_2020 <- cleaned_proportion_df_sans_2020 %>% 
+  filter(strata != 'Other') %>% 
+  group_by(stratifier) %>%
+  mutate(variable = case_when(variable == 'a1c' ~ 'Two or more A1C tests',
+                                   variable == 'CHOL_all' ~ 'Cholesterol tested',
+                                   variable == 'DENT_all' ~ 'One or more dentist visits',
+                                   variable == 'eye-exam' ~ 'Eye exam with dilation',
+                                   variable == 'flu' ~ 'Received flu vaccine',
+                                   variable == 'foot' ~ 'Foot examination')) %>% 
+  select(stratifier,
+         ` ` = strata,
+         `Preventive Practice` = variable, `2008`:`2020`, `Percent Change (95% CI)`, `Joinpoint Year` = segment,
+         `APC Period 1`, `APC Period 2`, `APC Period 3`, `AAPC`) %>%
+  mutate(stratifier = case_when(as.character(stratifier) == 'Poverty level' ~ 'Poverty income ratio',
+                                TRUE ~ as.character(stratifier))) %>% 
+  mutate(`APC (95% CI)` = paste(`APC Period 1`, `APC Period 2`, `APC Period 3`, sep = ", ") %>%
+           str_replace(., ", NA", "") %>%
+           str_replace(., ", NA", "")) %>% 
+  # Rename some columns to add () info
+  rename(`2008 (SE)` = `2008`,
+         #`2009 (SE)` = `2009`,
+         #`2010 (SE)` = `2010`,
+         `2011 (SE)` = `2011`,
+         #`2012 (SE)` = `2012`,
+         #`2013 (SE)` = `2013`,
+         `2014 (SE)` = `2014`,
+         #`2015 (SE)` = `2015`,
+         #`2016 (SE)` = `2016`,
+         `2017 (SE)` = `2017`,
+         #`2018 (SE)` = `2018`,
+         `2019 (SE)` = `2019`,
+         `2020 (SE)` = `2020`,
+         `APC Period 1 (95% CI)` = `APC Period 1`,
+         `APC Period 2 (95% CI)` = `APC Period 2`,
+         `APC Period 3 (95% CI)` = `APC Period 3`,
+         `AAPC (95% CI)` = `AAPC`) %>% 
+  select(
+    ` `,
+    `Preventive Practice`,
+    `2008 (SE)`,
+    #`2009 (SE),
+    #`2010 (SE),
+    `2011 (SE)`,
+    #`2012 (SE),
+    #`2013 (SE),
+    `2014 (SE)`,
+    #`2015 (SE),
+    #`2016 (SE),
+    `2017 (SE)`,
+    #`2018 (SE),
+    `2019 (SE)`,
+    `2020 (SE)`,
+    `Percent Change (95% CI)`,
+    `Joinpoint Year`,
+    `APC (95% CI)`,
+    `AAPC (95% CI)`,
+    -starts_with('APC Period')
+  ) %>%
+  gt() %>% 
+  sub_missing(missing_text = ' ') %>% 
+  tab_footnote(
+    footnote = "Values in these columns were estimated excluding data from 2020.",
+    locations = cells_column_labels(
+      columns = c(`Percent Change (95% CI)`,
+      `APC (95% CI)`,
+      `AAPC (95% CI)`
+    ))
+  ) %>% 
+  tab_options(footnotes.marks = "a")
+# Reorganize insurance variables
+ proportion_table_sans_2020$`_data` <- proportion_table_sans_2020$`_data`[c(1:84,
+                                                                            85, 88, 86, 87,
+                                                                            89, 92, 90, 91,
+                                                                            93, 96, 94, 95,
+                                                                            97, 100, 98, 99,
+                                                                            101, 104, 102, 103,
+                                                                            105, 108, 106, 107, 
+                                                                            109:nrow(proportion_table_sans_2020$`_data`)), ]
+
+
+prop_tab_sans_2020 <- proportion_table_sans_2020$`_data`
+proportion_table_sans_2020 %>%
+  gtsave('proportion_2020.docx')
+```
+
+```{r all-plots}
+
+
+stats_table_plot_dat <- jp_proportion_plot_data %>%
+  mutate(model = as.numeric(model)) %>% 
   filter(strata != 'Total') %>%
   filter(strata != 'Not available') %>% 
   filter(strata != 'Other Race/Not Hispanic') %>% 
+  filter(strata != 'Other') %>% 
   mutate(variable_text = case_when(variable == 'a1c' ~ 'Two or more A1C tests',
                                    variable == 'CHOL_all' ~ 'Cholesterol tested',
                                    variable == 'DENT_all' ~ 'One or more dentist visits',
@@ -231,7 +653,8 @@ stats_table_plot_dat <- map(stats_table_plot_dat, function(.x) {
 })
 
 
-overall_data <- stats_table_plot_dat$overall
+overall_data <- stats_table_plot_dat$overall %>% 
+  mutate(strata = case_when(strata == 'Overall' ~ 'z'))
 # Remove the overall data from the list
 stats_table_plot_dat <- stats_table_plot_dat[-4]
 # Relevel the poverty factors
@@ -351,7 +774,7 @@ exam_plots <- stats_table_plot_dat %>%
       theme(axis.text = element_text(color = 'black'),
             axis.text.x = element_text(angle = 45, hjust = 0.9, vjust = 0.95),
             legend.title = element_text(size = 8),
-            legend.text = element_text(size = 6)) +
+            legend.text = element_text(size = 7)) +
       labs(x = 'Year', y = 'Percentage')
   )
 
@@ -393,12 +816,701 @@ exam_plots <- list(
   exam_plots[[4]]
 )
 
-all_exam_plots <- exam_plots %>% 
+# all_exam_plots <- exam_plots %>% 
+#   wrap_plots(nrow = 6) &
+#   theme(plot.margin = margin(0.5, 0.5, 0.5, 0.5, 'pt'))
+# all_test_plots <- test_plots %>% 
+#   wrap_plots(nrow = 6) &
+#   theme(plot.margin = margin(0.5, 0.5, 0.5, 0.5, 'pt'))
+```
+
+```{r plots-sans-2020}
+set.seed(963458237)
+stats_table_plot_dat_sans_2020 <- jp_proportion_plot_data_sans_2020 %>%
+  mutate(model = as.numeric(model)) %>% 
+  filter(strata != 'Total') %>%
+  filter(strata != 'Not available') %>% 
+  filter(strata != 'Other Race/Not Hispanic') %>% 
+  filter(strata != 'Other') %>% 
+  mutate(variable_text = case_when(variable == 'a1c' ~ 'Two or more A1C tests',
+                                   variable == 'CHOL_all' ~ 'Cholesterol tested',
+                                   variable == 'DENT_all' ~ 'One or more dentist visits',
+                                   variable == 'eye-exam' ~ 'Eye exam with dilation',
+                                   variable == 'flu' ~ 'Received flu vaccine',
+                                   variable == 'foot' ~ 'Foot examination'),
+         strata = case_when(strata == 'Overall' ~ 'z',
+                            TRUE ~ strata)) %>% 
+  group_by(strata, variable) %>% 
+  mutate(strata = as.factor(strata),
+         significant_indicator = any(str_detect(apc, "[*]"))) %>% 
+  ungroup() %>% 
+  split(., f = .$stratifier)
+
+stats_table_plot_dat_sans_2020 <- map(stats_table_plot_dat_sans_2020, function(.x) {
+  .x %>% 
+    mutate(strata = fct_drop(strata))
+})
+
+
+overall_data_sans_2020 <- stats_table_plot_dat_sans_2020$overall
+# Remove the overall data from the list
+stats_table_plot_dat_sans_2020 <- stats_table_plot_dat_sans_2020[-4]
+# Relevel the poverty factors
+stats_table_plot_dat_sans_2020$poverty$strata <-
+  factor(
+    stats_table_plot_dat_sans_2020$poverty$strata,
+    levels = c('High income', 'Middle income', 'Low income', 'Poor/Negative'),
+    labels = c(
+      '> 400% ',
+      '200% - 399%',
+      '100% - 199%',
+      '< 100%'
+      
+    )
+  )
+# Set up color palette for up to 4 categories
+color_pal <- RColorBrewer::brewer.pal(n = 4, 'Set2')
+# Get the p for 2020 but remove the join point stuff so the line doesn't plot
+stats_table_2020_only <- stats_table_plot_dat %>% 
+  map(~filter(.x, year == 2020) %>% 
+        group_by(strata, variable) %>% 
+        mutate(model = NA,
+                significant_indicator = any(str_detect(apc, "[*]"))) %>% 
+        ungroup()
+  )
+
+legend_labels <- stats_table_plot_dat_sans_2020 %>% 
+  map(~.x %>% 
+        group_by(strata, variable) %>% 
+        summarise(sig_ind = mean(significant_indicator)) %>% 
+        ungroup()
+  )
+overall_legend <- overall_data_sans_2020 %>%
+  group_by(strata, variable) %>%
+  summarise(sig_ind = mean(significant_indicator)) %>%
+  ungroup()
+          
+
+
+test_plots_sans_2020 <-
+  map2(
+    stats_table_plot_dat_sans_2020,
+    stats_table_2020_only,
+    ~ ggplot(
+      filter(.x, variable %in% c('a1c', 'CHOL_all', 'flu')),
+      aes(
+        x = year,
+        y = p,
+        group = strata,
+        color = strata
+      )
+    ) +
+      geom_line(aes(
+        x = year,
+        y = model,
+        group = strata,
+        color = strata,
+        linetype = strata
+      )) +
+      geom_line(
+        data = filter(
+          overall_data_sans_2020,
+          variable %in% c('a1c', 'CHOL_all', 'flu')
+        ),
+        aes(
+          x = year,
+          y = model,
+          color = strata,
+          linetype = strata
+        ),
+      ) +
+      geom_jitter(
+        data = filter(.y, variable %in% c('a1c', 'CHOL_all')) ,
+        aes(
+          x = year,
+          y = p,
+          group = strata,
+          color = strata
+        ),
+        inherit.aes = FALSE,
+        width = 0.22,
+        height = 0.005
+      ) +
+      geom_point(
+        data = filter(
+          overall_data,
+          variable %in% c('a1c', 'CHOL_all'),
+          year == 2020
+        ),
+        aes(x = year, y = p, color = strata),
+        inherit.aes = FALSE
+      ) +
+      facet_wrap(~ variable_text, ncol = 3) +
+      theme_classic() +
+      scale_y_continuous(
+        limits = c(0, 100),
+        breaks = seq(0, 100, 25),
+        labels = seq(0, 100, 25)
+      ) +
+      scale_x_continuous(
+        limits = c(2008, 2020.3),
+        breaks = seq(2008, 2020, 2),
+        labels = seq(2008, 2020, 2)
+      ) +
+      theme(
+        axis.text = element_text(color = 'black'),
+        #axis.text.x = element_text(angle = 45, hjust = 0.9, vjust = 0.95),
+        legend.title = element_text(size = 11),
+        legend.text = element_text(size = 9)
+      ) +
+      labs(x = 'Year', y = 'Percentage')
+    
+  )
+
+
+
+test_plots_sans_2020[[1]] <-
+  test_plots_sans_2020[[1]] +
+  theme(axis.title.x = element_blank()) +
+  scale_color_manual(
+    name = 'Age (grouped)',
+    values = c(
+     '18 to 44' = color_pal[1],
+     '45 to 64'  = color_pal[2],
+     '65 to 74' = color_pal[3],
+     '75+' = color_pal[4],
+     'z' = '#000000'
+    ),
+    labels = c('18 to 44ᵇ',
+               '45 to 64ᵃᵇᶜ',
+               '65 to 74ᵇᶜ',
+               '75+ᵇᶜ',
+               'Overallᵇ')
+  ) +
+  scale_linetype_manual(
+    name = 'Age (grouped)',
+    values = c(
+     '18 to 44' = 'solid',
+     '45 to 64'  = 'solid',
+     '65 to 74' = 'solid',
+     '75+' = 'solid',
+     'z' = 'dashed'
+    ),
+    labels = c('18 to 44ᵇ',
+               '45 to 64ᵃᵇᶜ',
+               '65 to 74ᵇᶜ',
+               '75+ᵇᶜ',
+               'Overallᵇ')
+  )
+
+
+test_plots_sans_2020[[2]] <-
+  test_plots_sans_2020[[2]] +
+  theme(
+    strip.background =  element_blank(),
+    strip.text = element_blank(),
+    axis.title.x = element_blank()
+  ) +
+  scale_color_manual(
+    name = 'Highest degree obtained',
+    labels = c('Greater than HSᵇ',
+               'High school',
+               'Less than HSᵃᵇ',
+               'Overallᵇ'),
+    values = c(
+     'Greater than HS' = color_pal[1],
+     'High school' = color_pal[2],
+     'Less than high school'  = color_pal[3],
+     'z' = '#000000'
+    )
+  ) +
+  scale_linetype_manual(
+    name = 'Highest degree obtained',
+    labels = c('Greater than HSᵇ',
+               'High school',
+               'Less than HSᵃᵇ',
+               'Overallᵇ'),
+    values = c(
+     'Greater than HS' = 'solid',
+     'High school' = 'solid',
+     'Less than high school'  = 'solid',
+     'z' = 'dashed'
+    )
+  )
+
+test_plots_sans_2020[[3]] <-
+  test_plots_sans_2020[[3]] +
+  theme(
+    strip.background =  element_blank(),
+    strip.text = element_blank(),
+    axis.title.x = element_blank()
+  ) +
+  scale_color_manual(
+    name = 'Insurance',
+    values = c(
+      'Medicaid' = color_pal[1],
+      'Medicare only' = color_pal[2],
+      'Private only' = color_pal[3],
+      'Uninsured' = color_pal[4],
+      'z' = '#000000'
+    ),   labels = c(
+      'Medicaidᶜ',
+      'Medicare onlyᵃ',
+      'Private onlyᵃᶜ',
+      'Uninsuredᵃᶜ',
+      'Overallᵇ'
+    )
+  ) +
+  scale_linetype_manual(
+    name = 'Insurance',
+    values = c(
+      'Medicaid' = 'solid',
+      'Medicare only' = 'solid',
+      'Private only' = 'solid',
+      'Uninsured' = 'solid',
+      'z' = 'dashed'
+    ),
+        labels = c(
+      'Medicaidᶜ',
+      'Medicare onlyᵃ',
+      'Private onlyᵃᶜ',
+      'Uninsuredᵃᶜ',
+      'Overallᵇ'
+    )
+  )
+
+test_plots_sans_2020[[4]] <-
+  test_plots_sans_2020[[4]] +
+  theme(strip.background =  element_blank(),
+        strip.text = element_blank()) +
+  scale_color_manual(
+    name = 'Poverty income ratio',
+    labels = c('> 400%ᶜ',
+               '200% - 399%',
+               '100% - 199%ᵃ',
+               '< 100%ᵇ',
+               'Overallᵇ'),
+    
+    values = c(
+      '> 400% ' = color_pal[1],
+      '200% - 399%' = color_pal[2],
+      '100% - 199%' = color_pal[3],
+      '< 100%' = color_pal[4],
+      'z' = '#000000'
+    )
+  ) +
+  scale_linetype_manual(
+    name = 'Poverty income ratio',
+    labels = c('> 400%ᶜ',
+               '200% - 399%',
+               '100% - 199%ᵃ',
+               '< 100%ᵇ',
+               'Overallᵇ'),
+    values = c(
+      '> 400% ' = 'solid',
+      '200% - 399%' = 'solid',
+      '100% - 199%' = 'solid',
+      '< 100%' = 'solid',
+      'z' = 'dashed'
+    )
+  ) + 
+ labs(caption = "ᵃ p < 0.05 for cholesterol tested \nᵇ p < 0.05 for received flu vaccine \nᶜ p < 0.05 for A1C tests")
+
+test_plots_sans_2020[[5]] <-
+  test_plots_sans_2020[[5]] + theme(
+    strip.background =  element_blank(),
+    strip.text = element_blank(),
+    axis.title.x = element_blank()
+  ) +
+  scale_color_manual(
+    name = 'Race & Ethnicity',
+    labels = c(
+      'Asian/Not Hispanic',
+      'Black/Not Hispanic',
+      'Hispanicᶜ',
+      'White/Not Hispanicᵃᵇᶜ',
+      'Overallᵇ'
+    ),
+    values = c(
+     'Asian/Not Hispanic' = color_pal[1],
+     'Black/Not Hispanic'  = color_pal[2],
+     'Hispanic' = color_pal[3],
+     'White/Not Hispanic' = color_pal[4],
+     'z' = '#000000'
+    )
+  ) +
+  scale_linetype_manual(
+    name = 'Race & Ethnicity',
+    labels = c(
+      'Asian/Not Hispanic',
+      'Black/Not Hispanic',
+      'Hispanicᶜ',
+      'White/Not Hispanicᵃᵇᶜ',
+      'Overallᵇ'
+    ),
+    values = c(
+     'Asian/Not Hispanic' = 'solid',
+     'Black/Not Hispanic'  = 'solid',
+     'Hispanic' = 'solid',
+     'White/Not Hispanic' = 'solid',
+     'z' = 'dashed'
+    )
+  )
+test_plots_sans_2020[[6]] <-
+  test_plots_sans_2020[[6]] +
+  theme(
+    strip.background =  element_blank(),
+    strip.text = element_blank(),
+    axis.title.x = element_blank()
+  ) +
+  scale_color_manual(
+    name = 'Sex',
+    labels = c('Femaleᵇ',
+               'Maleᵃᵇ',
+               'Overallᵇ'),
+    values = c(
+     'Female' = color_pal[1],
+     'Male'  = color_pal[2],
+     'z' = '#000000'
+    )
+  ) +
+  scale_linetype_manual(
+    name = 'Sex',
+    labels = c('Femaleᵇ',
+               'Maleᵃᵇ',
+               'Overallᵇ'),
+        values = c(
+     'Female' = 'solid',
+     'Male'  = 'solid',
+     'z' = 'dashed'
+    )
+  )
+test_plots_sans_2020 <- list(
+  test_plots_sans_2020[[1]],
+  test_plots_sans_2020[[6]],
+  test_plots_sans_2020[[5]],
+  test_plots_sans_2020[[2]],
+  test_plots_sans_2020[[3]],
+  test_plots_sans_2020[[4]]
+)
+
+
+
+exam_plots_sans_2020 <-
+  map2(
+    stats_table_plot_dat_sans_2020,
+    stats_table_2020_only,
+    ~ ggplot(
+      filter(.x, variable %!in% c('a1c', 'CHOL_all', 'flu')),
+      aes(
+        x = year,
+        y = p,
+        group = strata,
+        color = strata
+      )
+    ) +
+      geom_line(aes(
+        x = year,
+        y = model,
+        group = strata,
+        color = strata,
+        linetype = strata
+      )) +
+      geom_line(
+        data = filter(
+          overall_data_sans_2020,
+          variable %!in% c('a1c', 'CHOL_all', 'flu')
+        ),
+        aes(x = year, y = model, color = strata, linetype = strata),
+      ) +
+      geom_jitter(
+        data = filter(.y, variable %!in% c('a1c', 'CHOL_all', 'flu')) ,
+        aes(
+          x = year,
+          y = p,
+          group = strata,
+          color = strata
+        ),
+        inherit.aes = FALSE,
+        width = 0.22,
+        height = 0.005
+      ) +
+      geom_point(
+        data = filter(
+          overall_data,
+          variable %!in% c('a1c', 'CHOL_all', 'flu'),
+          year == 2020
+        ),
+        aes(x = year, y = p, color = strata),
+        #color = 'black',
+        inherit.aes = FALSE
+      ) +
+      facet_wrap(~ variable_text, ncol = 3) +
+      theme_classic() +
+      scale_y_continuous(
+        limits = c(0, 100),
+        breaks = seq(0, 100, 25),
+        labels = seq(0, 100, 25)
+      ) +
+      scale_x_continuous(
+        limits = c(2008, 2020.3),
+        breaks = seq(2008, 2020, 2),
+        labels = seq(2008, 2020, 2)
+      ) +
+      theme(
+        axis.text = element_text(color = 'black'),
+        #axis.text.x = element_text(angle = 45, hjust = 0.9, vjust = 0.95),
+        legend.title = element_text(size = 11),
+        legend.text = element_text(size = 9)
+      ) +
+      labs(x = 'Year', y = 'Percentage')
+  )
+
+# Set up legends on all plots
+exam_plots_sans_2020[[1]] <- exam_plots_sans_2020[[1]] +
+  theme(axis.title.x = element_blank()) +
+  scale_color_manual(
+    name = 'Age (grouped)',
+    labels = c('18 to 44',
+               '45 to 64',
+               '65 to 74ᵇᶜ',
+               '75+ᵃᵇ',
+               'Overallᵇ'),
+    values =   c(
+      '18 to 44' = color_pal[1],
+      '45 to 64'  = color_pal[2],
+      '65 to 74' = color_pal[3],
+      '75+' = color_pal[4],
+      'z' = '#000000'
+    )
+  ) +
+  scale_linetype_manual(
+    name = 'Age (grouped)',
+    labels = c('18 to 44',
+               '45 to 64',
+               '65 to 74ᵇᶜ',
+               '75+ᵃᵇ',
+               'Overallᵇ'),
+    values = c(
+      '18 to 44' = 'solid',
+      '45 to 64'  = 'solid',
+      '65 to 74' = 'solid',
+      '75+' = 'solid',
+      'z' = 'dashed'
+    )
+  )
+
+
+exam_plots_sans_2020[[2]] <-
+  exam_plots_sans_2020[[2]] +
+  theme(
+    strip.background =  element_blank(),
+    strip.text = element_blank(),
+    axis.title.x = element_blank()
+  ) +
+  scale_color_manual(
+    name = 'Highest degree obtained',
+    labels = c('Greater than HS',
+               'High schoolᶜ',
+               'Less than HS',
+               'Overallᵇ'),
+        values = c(
+      'Greater than HS' = color_pal[1],
+      'High school' = color_pal[2],
+      'Less than high school'  = color_pal[3],
+      'z' = '#000000'
+    )
+  ) +
+    scale_linetype_manual(
+      name = 'Highest degree obtained',
+    labels = c('Greater than HS',
+               'High schoolᶜ',
+               'Less than HS',
+               'Overallᵇ'),
+    values = c(
+      'Greater than HS' = 'solid',
+      'High school' = 'solid',
+      'Less than high school'  = 'solid',
+      'z' = 'dashed'
+    )
+  )
+
+
+exam_plots_sans_2020[[3]] <-
+  exam_plots_sans_2020[[3]] +
+  theme(
+    strip.background =  element_blank(),
+    strip.text = element_blank(),
+    axis.title.x = element_blank()
+  ) +
+  scale_color_manual(
+    name = 'Insurance',
+    labels = c(
+      'Medicaid',
+      'Medicare only',
+      'Private onlyᵃᵇ',
+      'Uninsuredᵃ',
+      'Overallᵇ'
+    ),
+        values = c(
+      'Medicaid' = color_pal[1],
+      'Medicare only' = color_pal[2],
+      'Private only' = color_pal[3],
+      'Uninsured' = color_pal[4],
+      'z' = '#000000'
+    )
+  ) +
+  scale_linetype_manual(
+    name = 'Insurance',
+    labels =  c(
+      'Medicaid',
+      'Medicare only',
+      'Private onlyᵃᵇ',
+      'Uninsuredᵃ',
+      'Overallᵇ'
+    ),
+    values = c(
+      'Medicaid' = 'solid',
+      'Medicare only' = 'solid',
+      'Private only' = 'solid',
+      'Uninsured' = 'solid',
+      'z' = 'dashed'
+    )
+  )
+
+
+exam_plots_sans_2020[[4]] <-
+  exam_plots_sans_2020[[4]] +
+  theme(strip.background =  element_blank(),
+        strip.text = element_blank()) +
+  scale_color_manual(
+    name = 'Poverty income ratio',
+    labels = c('> 400%ᵃ',
+               '200% - 399%',
+               '100% - 199%',
+               '< 100%ᶜ',
+               'Overallᵇ'),
+    values = c(
+      '> 400% ' = color_pal[1],
+      '200% - 399%' = color_pal[2],
+      '100% - 199%' = color_pal[3],
+      '< 100%' = color_pal[4],
+      'z' = '#000000'
+    )
+  ) +
+  scale_linetype_manual(
+    name = 'Poverty income ratio',
+    labels = c('> 400%ᵃ',
+               '200% - 399%',
+               '100% - 199%',
+               '< 100%ᶜ',
+               'Overallᵇ'),
+    values = c(
+      '> 400% ' = 'solid',
+      '200% - 399%' = 'solid',
+      '100% - 199%' = 'solid',
+      '< 100%' = 'solid',
+      'z' = 'dashed'
+    )
+  ) +
+  labs(caption = "ᵃ p < 0.05 for eye-exam \nᵇ p < 0.05 for foot exam \nᶜ p < 0.05 for dentist visit")
+
+
+exam_plots_sans_2020[[5]] <-
+  exam_plots_sans_2020[[5]] +
+  theme(
+    strip.background =  element_blank(),
+    strip.text = element_blank(),
+    axis.title.x = element_blank()
+  ) +
+  scale_color_manual(
+    name = 'Race & Ethnicity',
+    labels = c(
+      'Asian/Not Hispanic',
+      'Black/Not Hispanic',
+      'Hispanic',
+      'White/Not Hispanicᶜ',
+      'Overallᵇ'
+    ),
+    values = c(
+      'Asian/Not Hispanic' = color_pal[1],
+      'Black/Not Hispanic'  = color_pal[2],
+      'Hispanic' = color_pal[3],
+      'White/Not Hispanic' = color_pal[4],
+      'z' = '#000000'
+    )
+  ) +
+  scale_linetype_manual(
+    name = 'Race & Ethnicity',
+        labels = c(
+      'Asian/Not Hispanic',
+      'Black/Not Hispanic',
+      'Hispanic',
+      'White/Not Hispanicᶜ',
+      'Overallᵇ'
+    ),
+    values = c(
+      'Asian/Not Hispanic' = 'solid',
+      'Black/Not Hispanic'  = 'solid',
+      'Hispanic' = 'solid',
+      'White/Not Hispanic' = 'solid',
+      'z' = 'dashed'
+    )
+  )
+
+
+exam_plots_sans_2020[[6]] <-
+  exam_plots_sans_2020[[6]] +
+  theme(
+    strip.background =  element_blank(),
+    strip.text = element_blank(),
+    axis.title.x = element_blank()
+  ) +
+  scale_color_manual(
+    name = 'Sex',
+    labels = c('Female',
+               'Maleᵃ',
+               'Overallᵇ'),
+    values = c(
+      'Female' = color_pal[1],
+      'Male'  = color_pal[2],
+      'z' = '#000000'
+    )
+  ) +
+  scale_linetype_manual(
+    name = 'Sex',
+    labels = c('Female',
+               'Maleᵃ',
+               'Overallᵇ'),
+    values = c(
+      'Female' = 'solid',
+      'Male'  = 'solid',
+      'z' = 'dashed'
+    )
+  )
+  
+  
+exam_plots_sans_2020 <- list(
+  exam_plots_sans_2020[[1]],
+  exam_plots_sans_2020[[6]],
+  exam_plots_sans_2020[[5]],
+  exam_plots_sans_2020[[2]],
+  exam_plots_sans_2020[[3]],
+  exam_plots_sans_2020[[4]]
+)
+
+all_exam_plots_sans_2020 <- exam_plots_sans_2020 %>% 
   wrap_plots(nrow = 6) &
-  theme(plot.margin = margin(0.5, 0.5, 0.5, 0.5, 'pt'))
-all_test_plots <- test_plots %>% 
+  theme(plot.margin = margin(0.5, 0.5, 0.5, 0.5, 'pt'),
+        legend.justification = 'left',
+        plot.caption = element_text(hjust = 0)) &
+  guides(color = guide_legend(ncol = 2)) 
+all_test_plots_sans_2020 <- test_plots_sans_2020 %>% 
   wrap_plots(nrow = 6) &
-  theme(plot.margin = margin(0.5, 0.5, 0.5, 0.5, 'pt'))
+  theme(plot.margin = margin(0.5, 0.5, 0.5, 0.5, 'pt'),
+        legend.justification = 'left',
+         plot.caption = element_text(hjust = 0)) &
+  guides(color = guide_legend(ncol = 2))
 ```
 
 ```{r}
@@ -406,82 +1518,109 @@ all_test_plots <- test_plots %>%
 # Save figure/table output
 preventive_practice_table %>%
   gtsave('preventive_practices.docx')
-ggsave(plot = all_exam_plots,
+preventive_practice_table_sans_2020 %>%
+  gtsave('preventive_practices_2020.docx')
+ggsave(plot = all_exam_plots_sans_2020,
        filename = 'figures/all_exam_plots.tiff',
-       dpi = 200,
+       dpi = 1200,
        width = 10,
        height = 6)
-ggsave(plot = all_test_plots,
+ggsave(plot = all_test_plots_sans_2020,
        filename = 'figures/all_test_plots.tiff',
-       dpi = 200,
+       dpi = 1200,
        width = 10,
        height = 6)
-ggsave(plot = all_exam_plots,
-       filename = 'figures/all_exam_plots.svg',
-       dpi = 200,
-       width = 10,
-       height = 6)
-ggsave(plot = all_test_plots,
-       filename = 'figures/all_test_plots.svg',
-       dpi = 200,
-       width = 10,
-       height = 6)
+# ggsave(plot = all_exam_plots,
+#        filename = 'figures/all_exam_plots.svg',
+#        dpi = 200,
+#        width = 10,
+#        height = 6)
+# ggsave(plot = all_test_plots,
+#        filename = 'figures/all_test_plots.svg',
+#        dpi = 200,
+#        width = 10,
+#        height = 6)
 ```
+
+*Target Journal: American Journal of Preventive Medicine*
+
 **Trends in Preventive Care Practices among US Adults with Diabetes, 2008-2020**
 
-Jacob T. Wittman, PhD, Kai M. Bullard, MPH, PHD, PhD Stephen R. Benoit, MD, MPH
+Jacob T. Wittman, PhD, Kai McKeever Bullard, MPH, PhD, Stephen R. Benoit, MD, MPH
 
 CDC Affiliation
+
+Corresponding Author:
+
+Word Count:
+
+Conflict of Interest Statement:
+
+Financial Disclosure:
 
 \pagebreak
 
 # Abstract
 
+**Introduction:** Preventive care practices are important for managing complications associated with diabetes. We report on trends in receipt of six American Diabetes Associated recommended preventive care practices during 2008 - 2020.
+
+**Methods:** We used 2008 - 2020 data from the Medical Expenditures Panel Survey to calculate the proportion of adults diagnosed with diabetes 18 years of age and older that reported receiving preventive care practices overall and for subpopulations. We used Joinpoint regression to identify trends in the data from 2008 - 2019. The six practices we have data for were at least one dental examination, an eye examination that includes dilation, a foot examination, at least two A1C tests, a cholesterol test, and the receipt of a flu vaccine.
+
+**Results:** From 2008 to 2019, the proportion of adults reporting having received at least three of six recommended practices decreased from 71.0% in 2008 to 67.3%, although this trend was not significant. No significant changes were seen for most subgroups. Most individual practices examined also were flat or decreased over the study period, except for the receipt of 2 or more A1C tests in year, which increased.
+
+**Conclusions:** Receipt of preventive care for diabetes was flat from 2008 to 2019 overall and for most subgroups. Declining trends were observed in few subgroups and may lead to increasing diabetes burden among these subgroups. 
+
 \pagebreak
 
 # Introduction
 
-Intro -- peak incidence in 2008/2009, increasing rates of some major complications + projections of diabetes numbers; previous reports of preventive care practices
+Diabetes is a chronic disease that affects 11.3% of the adult population, or 37.1 million adults, in the United States @nationalreport. Diabetes is also costly: total direct and indirect costs associated with diabetes are estimated at \$327 billion @economic2018. Incidence of diabetes peaked in the US at 8.5 cases per 1,000 in 2008 and 2009 and has fallen since to 5.1 cases per 1,000 [@dashboard; @magliano2019]. Despite this decrease in the incidence of diabetes, rates of hospitalization with diabetes as the primary diagnosis have been increasing since the year 2000 by about 2.5% per year @zhang2022. The prevalence of diabetes in the US is expected to increase to 60.6 million adults by the year 2060 @lin2018. Access to preventive services health care is important to minimize complications due to diabetes and reduce rates of hospitalization.
 
-Diabetes is a chronic disease that affects XX people in the USA.
+In this study, we report the proportion of and trends in the receipt of six preventive care practices recommended by the ADA overall and among subgroups. These data are valuable for identifying groups that may be underutilizing health care services, examining any effects the COVID-19 pandemic may have had on the receipt of these practices, and providing benchmarks for future studies.
 
 # Methods
 
 ## Data Source
 
-We used data from the Medical Expenditure Panel Survey (MEPS) from the years 2008 - 2020 to evaluate trends in preventive care practices in adults 18 years or older with diabetes in the USA. Participants in this survey are a subsample of households that participate in the National Health Interview Survey (NHIS). The MEP survey targets the civilian noninstitutionalized population in the US and provides national and regional estimates of health care use, expenditures, sources of payment and health insurance coverage. This survey also contains information on patient demographics, socioeconomic, and, via the Diabetes Care Survey (DCS), information on diabetes preventive care practices. The DCS is a self-administered paper-and-pencil questionnaire that is provided to MEPS respondents who indicate that they have been told by a doctor or health professional that they have diabetes. The data we used comes from the full-year consolidated file from MEPS for the 12 year time span of our report.
+We used data from the Medical Expenditure Panel Survey (MEPS) from the years 2008 - 2020. We chose 2008 to 2020 due to method changes in MEPS and the consistency of particular questions related to preventive care practices during that time period. Respondents were randomly chosen from a subsample of households that participated in the National Health Interview Survey (NHIS). Data used from MEPS were collected through a combination of computer assisted personal interviewing and pencil-and-paper surveys. The average number annual of individual respondents over this 13 year period was 32,170. MEPS targets the civilian noninstitutionalized population in the US and provides national and regional estimates of health care use, expenditures, sources of payment and health insurance coverage. This survey also contains information on patient demographics, socioeconomic, and, via the Diabetes Care Survey (DCS), information on diabetes preventive care practices. The DCS is a self-administered paper-and-pencil questionnaire that is provided to MEPS respondents who indicate that they have been told by a doctor or health professional that they have diabetes. The data we used comes from the full-year consolidated file from MEPS for the 13 year time span of our report.
 
 ## Outcomes
 
-We selected six outcome variables that were readily available in the data from 2008 - 2020 and that are based on American Diabetes Association annual care recommendations. These six recommendations include at least one dental examination, an eye examination that includes dilation, a foot examination, at least two A1C tests, a cholesterol test, and the receipt of a flu vaccine. The number of total dentist visits in a year is available in the MEPS data and was used to determine which adults had one or more dentist visits in a year. Respondents were also asked if they had an eye examination, a foot examination, a flu vaccine, or a cholesterol test in a given year of the survey. The number of A1C tests received by a respondent was recorded and we grouped respondents into those that had two or more A1C tests in a year and those that had less than two. Using the binary outcomes for each of these six measures, we further classified adults as having received at least three of those recommended care practices and those that received less than three of these practices.
+Among those respondents with self-reported diagnosed diabetes, we selected six preventive care variables that were available in the data from 2008 -- 2020, based on self-reported receipt in the past year @ada2021: ≥1 dental examination, a dilated eye examination, a foot examination, ≥2 A1C tests, a cholesterol test, and an influenza vaccine. We also created a binary variable classifying adults as having received at least three of those recommended preventive care practices.
 
 ## Analysis
 
-Our analysis is adjusted for the complex survey design used, including clustering and stratification. Reported values for the percentages of the population receiving recommended preventive care practices are direct age-adjusted estimates. These estimates are presented for the overall population, as well as stratified by age, sex, race and ethnicity, highest degree of education obtained, type of insurance, and the ratio of income to poverty line.
+Our analysis accounts for the complex survey design used, including clustering and stratification. Reported values throughout were age-adjusted using the direct method, standardized to the 2000 US population grouped by ages 18 - 44, 45 - 64, 65 - 74, and older than 75. We presented these estimates for the overall population, as well as stratified by age, sex, race and ethnicity, highest degree of education obtained, type of insurance, and the ratio of family income to the poverty line (income poverty ratio). We used the package gtsummary in R Statistical Software (v4.2.1) to calculate estimates [@gtsummary; @rcore2022].
 
-We used R Statistical Software (v4.2.1) @rcore2022 to perform all analyses. The package gtsummary was used to account for the complex survey design and age-adjust estimates @gtsummary. Trends in preventive care practices were analyzed using Joinpoint Command Line Software @joinpoint with R via the R package nih.joinpoint @nihjoinpoint. Joinpoint regression uses permutation tests to detect statistically significant changes at a pre-specified alpha of 0.05 in direction and/or magnitude of trends @kim2000permutation. The Joinpoint software also provided estimates of the annual percent change (APC) for each trend segment and the average annual percent change (AAPC) for the entire trend.
+Medical care utilization decreased as a result of the COVID-19 pandemic starting in early 2020 @cantor2022. We reported the estimated proportions for 2020 in Table 1 and as points in @fig-exams and @fig-tests, but 2020 was excluded from trend analysis. Trends were analyzed using Joinpoint Command Line Software @joinpoint with R via the R package nih.joinpoint @nihjoinpoint. Joinpoint regression uses permutation tests to detect statistically significant changes at a pre-specified alpha of 0.05 in direction or magnitude of trends @kim2000permutation. The Joinpoint software also provided estimates of the annual percent change (APC) for each trend segment and the average annual percent change (AAPC) for the entire trend.
 
 # Results
 
-For the entire population of adults diagnosed with diabetes in the USA there was a significant decrease of `r pullNumber(tab1, '-', 'Percent Change (95% CI)')` in the percentage of people receiving at least three of the recommended practices from 2008 to 2020 (Table 1).  (Table 1). The largest decreases in the percentage of adults receiving at least three preventive care practices were seen in those with no high school diploma (`r pullNumber(tab1, 'Less than high school', 'Percent Change (95% CI)')`%), Asian/Not Hispanic (`r pullNumber(tab1, 'Asian/Not Hispanic', 'Percent Change (95% CI)')`%), the uninsured (`r pullNumber(tab1, 'Uninsured', 'Percent Change (95% CI)')`%), and those with an income to poverty line ratio between 100% and 199% (`r pullNumber(tab1, '100% - 199%', 'Percent Change (95% CI)')`%) (Table 1).
+## Trends in ≥ 3 preventive care practices received
 
-While the percent change and AAPC for nearly all groups were negative, some groups had APC values that were initially flat (i.e. the 95% CI overlapped 0) in the first period but became negative in the second period (Table 1). The year in which Joinpoint regression identified statistically significant changes in the slope of the trend ranged from 2010 - 2015 (Table 1). Only adults in the highest poverty to income ratio category (\>400%) had an initial APC that was positive at `r pullNumber(tab1, '> 400%', 'APC Period 1 (95% CI)')`% (Table 1).
+Overall, we observed no statistically significant percent change of adults receiving three or more recommended preventive care practices between 2008 and 2019 (`r pullNumber(tab_sans_2020, '-', 'Percent Change (95% CI)', brackets = TRUE)`) (Table 1). Few groups exhibited significant changes in this trend over the same time period (Table 1). For adults age 75 and older, the percentage receiving three or more of the recommended care practices was flat from 2008 to 2014 (APC `r pullNumber(tab_sans_2020, '75+', 'APC Period 1 (95% CI)', brackets = T)`), and after 2015 was decreasing (APC `r pullNumber(tab_sans_2020, '75+', 'APC Period 2 (95% CI)', brackets = T)`). Adults with less than a high school education had a flat trend until 2012, which was followed by an APC in the second period of `r pullNumber(tab_sans_2020, 'Less than high school', 'APC Period 2 (95% CI)', brackets = F)`.
 
-Overall trends in each of the individual preventive practices decreased from 2008 to 2020, with the exception of the percentage of people receiving two or more A1C tests in one year, which increased from `r sigfig(overall_data$age_adjusted_prop[1] * 100, digits = 3)`% to `r sigfig(overall_data$age_adjusted_prop[13] * 100, digits = 3)`% (@fig-exams & @fig-tests). Trends in the percentages of people getting an eye exam with dilation and one or more dentist visits tended to be close to flat or decreasing, with a few exceptions where percentages first increased until the mid 2010s and then began to decrease (e.g., see the eye exam graph for the poverty income ratio stratifier and dentist visits for race and ethnicity stratifier, @fig-exams). The overall trend for foot exams initially increased and then started to decrease in 2012, and many of the stratifier-specific groups follow a similar trend (@fig-exams). The trend overall and among our stratifying variables for cholesterol testing and receiving a flu vaccine also generally follow the trend of increasing until between 2013 - 2015, where they begin to decrease, although a few specific stratifying groups only decrease over the examined time period (@fig-tests). The percentage of the population receiving two or more A1C tests in a year only increased overall and for all groups (@fig-tests).
+Both males and females showed decreasing percentages of adults receiving three or more recommended preventive care practices. The AAPC for females was `r pullNumber(tab_sans_2020, 'Female', 'APC Period 1 (95% CI)', brackets = F)` over the entire period, whereas the trend for males was flat until 2015, at which point it began to decrease (APC `r pullNumber(tab_sans_2020, 'Male', 'APC Period 2 (95% CI)', brackets = T)`). Among the insurance groups, there were no significant change with the exception of Medicaid, which showed an overall decline in percentage of adults receiving three or more practices (AAPC `r pullNumber(tab_sans_2020, 'Medicaid', 'APC Period 1 (95% CI)', brackets = F)`). The percentage of adults in the highest earning group receiving three or more recommended care practices increased annually by `r pullNumber(tab_sans_2020, '> 400%', 'APC Period 1 (95% CI)', brackets = F)` and was flat after 2010 (`r pullNumber(tab_sans_2020, '> 400%', 'APC Period 2 (95% CI)', brackets = T)`). Adults earning just above the poverty line that received three or more of the recommended practices changed by `r pullNumber(tab_sans_2020, '100% - 199%', 'APC Period 1 (95% CI)', brackets = F)`. Estimated proportions tended to be lower in 2020 than in 2019 for most groups, except Black/Not Hispanic, males, and the uninsured.
+
+## Trends for each preventive care practice
+
+@fig-exams and @fig-tests show the trends for individual preventive care practices and indicate which trends were significantly increasing or decreasing, or had segments that were significantly increasing or decreasing. Estimates plotted in @fig-exams can be found in the table in Appendix 1. Trends for all adults with diabetes receiving a foot examination  decreased starting in 2011 (@fig-exams). The percent of adults getting a flu vaccine increased until 2013 then began to decrease (@fig-tests). The shape of the trends in subgroups tend to mirror the overall trend for each practice, although the year at which trend values change may differ among these subgroups. The trend in some subgroups for each preventive practice do not always follow the shape of the overall trend, however. For example, the overall trend in the percentage of adults with diabetes receiving an eye examination with dilation was flat over 2008 to 2019. Within the income poverty ratio subgroups, only those in the highest poverty income ratio group (\> 400%) deviate from this flat trend by first increasing, then decreasing starting in 2013 (@fig-exams). Different groups exhibit different amounts of variation among the categories in each group. For example, the trends for all six practices split by sex tend to be very similar, whereas the gaps between the different insurance group trends are larger. 
 
 # Discussion
 
+Despite the recovery from the Great Recession in 2008 and the passing of the Affordable Care Act (ACA) in 2010, there was no change overall and for many subgroups in the percentage of people receiving at least three recommended preventive care services, while a few subgroups showed decreasing percentages. While the passing of the ACA led to an increase in the number of adults with diagnosed and undiagnosed diabetes that have health insurance and an increase in their use of health care services [@myerson2019; @simon2017], detecting changes in the receipt of preventive care has proved more elusive. Two studies that used data from the Behavioral Risk Factor Surveillance System (BRFSS) found no changes overall in the receipt of preventive care for adults with diabetes as a result of the Medicaid expansion [@monnette2020; @luo2019]. It may be difficult to detect changes in any single preventive care practice or aggregate count of preventive care, especially if other factors are presenting stronger barriers to care. For example, depression may reduce adherence to or seeking of patient-initiated activities such as diet and exercise recommendations among adults with diabetes [@gonzalez2007]. Even with higher rates of medical service use among adults with both depression and diabetes, rates of physician-initiated services were no different between adults with and without depression [@lin2004].
 
-Discussion -- ACA and recovery from Great Recession as context for increasing trends after 2008 until 2016 (then what happened?); compare to BRFSS state estimates; impact of COVID on receipt of PCP; speculation about future burden of complications due to suboptimal preventive care
+Other studies on the trends in preventive care using different data sources report different findings. A study using data from the National Health and Nutrition Examination Survey (NHANES) found increases in the proportion of adults with diabetes that reported having a primary care doctor, received an annual check-up with a physician, had at least two A1C tests in a year, had their cholesterol levels tested, and had an annual foot exam by a doctor @shin2021. Another study that reported on data from NHANES, the National Health Interview Survey, and (BRFSS) found that foot exams, flu vaccinations, and A1C testing increased from 1999 - 2016, although eye exams stayed roughly constant @fang2020.
 
-BRFSS estimates
-- Median state eye exam is roughly flat - individual states bounce all over
-- Median foot exam is flat/maybe increasing? 
-- Median state A1c tests - also flattish/maybe increasing? hard to say
-- Median state flu vaccine - bounces around a bit more. Overall line would probably be flat though? Nationally though the estimate is pretty clearly increasing overall and for all available stratifiers
-- No cholesterol or dentist info from BRFSS? Not on dashboard anyway.
+## Limitations
 
-Limitations -- cross-sectional, self-report only, declining response rate
+This report is not without limitations. The data from MEPS are self-report only, which may introduce bias, and the study group is cross-sectional. Additionally, there has been a steadily declining response rate for this survey from a peak during the studied time period of 59.3% in 2008 to 39.5% in 2019 and 27.6% in 2020, although weights for these data are adjusted for non-response. Furthermore, we were unable to distinguish between type 1 and type 2 diabetes in these data. Because of the greater prevalence of type 2 diabetes the trends we report likely are more reflective of type 2 diabetes than type 1.
+
+# Conclusions
+
+In summary, receipt of preventive care for diabetes was flat from 2008 to 2019 overall and for most subgroups. Decreasing trends in preventive care percentages were seen in adults with diabetes over the age of 74, adults with less than a high school education, males and females, and adults with private insurance only or Medicaid. Declining trends in preventive care may lead to increasing complications due to diabetes in these subgroups, increasing the burden of diabetes.
+
+# Acknowledgements
 
 # References
 
@@ -490,288 +1629,49 @@ Limitations -- cross-sectional, self-report only, declining response rate
 
 \pagebreak
 
+::: landscape
 # Tables
 
 ```{r}
 #| label: tbl-prev
 #| tbl-cap: Age-adjusted trends in proportions of US adults with diabetes that report receiving at least three of six recommended care practices - at least one dental visit, one eye exam with dilation, one foot exam, two or more A1C tests, cholesterol level tested, and receiving a flu vaccine.
 
-preventive_practice_table
+preventive_practice_table_sans_2020
 ```
 
 \pagebreak
 
-::: landscape
 # Figures
-
 
 ```{r}
 #| label: fig-exams
-#| fig-cap: Age-adjusted trends in proportions of US adults with diabetes who reported receiving recommended medical examinations. The dashed black line is the overall trend.
+#| fig-cap: Age-adjusted trends in proportions of US adults with diabetes who reported receiving recommended medical examinations from 2008 - 2019. The dashed black line is the overall trend, while dots represent percentages for 2020. Data from 2020 was not included in the trend analysis.
 #| fig-width: 8
 
-all_exam_plots
+all_exam_plots_sans_2020
 ```
 
 \pagebreak
 
 ```{r}
 #| label: fig-tests
-#| fig-cap: Age-adjusted trends in proportions of US adults with diabetes who reported receiving recommended lab tests and vaccinations. The dashed black line is the overall trend. 
+#| fig-cap: Age-adjusted trends in proportions of US adults with diabetes who reported receiving recommended lab tests and vaccinations. The dashed black line is the overall trend, while dots represent percentages for 2020. Data from 2020 was not included in the trend analysis.
 #| fig-width: 10
 
-all_test_plots
+all_test_plots_sans_2020
 ```
+
+\pagebreak
+
+# Supplemental Table
+
+
+
+```{r}
+#| label: tbl-prop
+#| tbl-cap: Age-adjusted trends in proportions of US adults with diabetes that report receiving six recommended care practices - at least one dental visit, one eye exam with dilation, one foot exam, two or more A1C tests, cholesterol level tested, and receiving a flu vaccine.
+
+proportion_table_sans_2020
+```
+
 :::
-
-## Alternative figure options
-
-```{r}
-test_plots1 <- stats_table_plot_dat %>% 
-   map(
-    ~ ggplot(filter(.x, variable %in% c('a1c', 'CHOL_all')),
-             aes(
-      x = year,
-      y = p,
-      group = strata,
-      color = strata
-    )) +
-      #geom_point() +
-      geom_line(aes(x = year, y = model, group = strata, color = strata)) +
-      geom_line(data = filter(overall_data, variable %in% c('a1c', 'CHOL_all')),
-                  aes(x = year, y = model),
-                  color = 'black',
-                  linetype = 'dashed') +
-      facet_wrap( ~ variable_text, ncol = 3) +
-      theme_classic() +
-      scale_y_continuous(
-        limits = c(00, 100),
-        breaks = seq(0, 100, 25),
-        labels = seq(0, 100, 25)
-      ) +
-      scale_x_continuous(
-        limits = c(2008, 2020),
-        breaks = seq(2008, 2020, 2),
-        labels = seq(2008, 2020, 2)
-      ) +
-      scale_color_brewer(type = 'qual', palette = 'Set2') +
-      theme(axis.text = element_text(color = 'black'),
-            axis.text.x = element_text(angle = 45, hjust = 0.9, vjust = 0.95),
-            legend.title = element_text(size = 8),
-            legend.text = element_text(size = 6)) +
-      labs(x = 'Year', y = 'Percentage')
-  )
-
-test_plots1[[1]] <- test_plots1[[1]] + labs(color = 'Age (grouped)') +
-  theme(axis.title.x = element_blank())
-test_plots1[[2]] <-
-  test_plots1[[2]] + labs(color = 'Highest degree \nobtained') + theme(
-    strip.background =  element_blank(),
-    strip.text = element_blank(),
-    axis.title.x = element_blank()
-  )
-test_plots1[[3]] <-
-  test_plots1[[3]] + labs(color = "Insurance") + theme(
-    strip.background =  element_blank(),
-    strip.text = element_blank(),
-    axis.title.x = element_blank()
-  )
-test_plots1[[4]] <-
-  test_plots1[[4]] + labs(color = 'Poverty income ratio') + theme(
-    strip.background =  element_blank(),
-    strip.text = element_blank()
-  )
-test_plots1[[5]] <-
-  test_plots1[[5]] + labs(color = 'Race & Ethnicity') + theme(
-    strip.background =  element_blank(),
-    strip.text = element_blank(),
-    axis.title.x = element_blank()
-  )
-test_plots1[[6]] <-
-  test_plots1[[6]] + labs(color = 'Sex') + theme(strip.background =  element_blank(),
-                                                strip.text = element_blank(),
-    axis.title.x = element_blank())
-test_plots1 <- list(
-  test_plots1[[1]],
-  test_plots1[[6]],
-  test_plots1[[5]],
-  test_plots1[[2]],
-  test_plots1[[3]],
-  test_plots1[[4]]
-)
-
-test_plots2 <- stats_table_plot_dat %>% 
-   map(
-    ~ ggplot(filter(.x, variable %in% c('foot', 'flu')),
-             aes(
-      x = year,
-      y = p,
-      group = strata,
-      color = strata
-    )) +
-      #geom_point() +
-      geom_line(aes(x = year, y = model , group = strata, color = strata)) +
-      geom_line(data = filter(overall_data, variable %in% c('foot', 'flu')),
-                  aes(x = year, y = model ),
-                  color = 'black',
-                  linetype = 'dashed') +
-      facet_wrap( ~ variable_text, ncol = 3) +
-      theme_classic() +
-      scale_y_continuous(
-        limits = c(00, 100),
-        breaks = seq(0, 100, 25),
-        labels = seq(0, 100, 25)
-      ) +
-      scale_x_continuous(
-        limits = c(2008, 2020),
-        breaks = seq(2008, 2020, 2),
-        labels = seq(2008, 2020, 2)
-      ) +
-      scale_color_brewer(type = 'qual', palette = 'Set2') +
-      theme(axis.text = element_text(color = 'black'),
-            axis.text.x = element_text(angle = 45, hjust = 0.9, vjust = 0.95),
-            legend.title = element_text(size = 8),
-            legend.text = element_text(size = 6)) +
-      labs(x = 'Year', y = 'Percentage')
-  )
-
-test_plots2[[1]] <- test_plots2[[1]] + labs(color = 'Age (grouped)') +
-  theme(axis.title.x = element_blank())
-test_plots2[[2]] <-
-  test_plots2[[2]] + labs(color = 'Highest degree \nobtained') + theme(
-    strip.background =  element_blank(),
-    strip.text = element_blank(),
-    axis.title.x = element_blank()
-  )
-test_plots2[[3]] <-
-  test_plots2[[3]] + labs(color = "Insurance") + theme(
-    strip.background =  element_blank(),
-    strip.text = element_blank(),
-    axis.title.x = element_blank()
-  )
-test_plots2[[4]] <-
-  test_plots2[[4]] + labs(color = 'Poverty income ratio') + theme(
-    strip.background =  element_blank(),
-    strip.text = element_blank()
-  )
-test_plots2[[5]] <-
-  test_plots2[[5]] + labs(color = 'Race & Ethnicity') + theme(
-    strip.background =  element_blank(),
-    strip.text = element_blank(),
-    axis.title.x = element_blank()
-  )
-test_plots2[[6]] <-
-  test_plots2[[6]] + labs(color = 'Sex') + theme(strip.background =  element_blank(),
-                                                strip.text = element_blank(),
-    axis.title.x = element_blank())
-test_plots2 <- list(
-  test_plots2[[1]],
-  test_plots2[[6]],
-  test_plots2[[5]],
-  test_plots2[[2]],
-  test_plots2[[3]],
-  test_plots2[[4]]
-)
-
-exam_plots1 <- stats_table_plot_dat %>% 
-   map(
-    ~ ggplot(filter(.x, variable %!in% c('a1c', 'CHOL_all', 'flu', 'foot')),
-             aes(
-      x = year,
-      y = p,
-      group = strata,
-      color = strata
-    )) +
-      #geom_point() +
-      geom_line(aes(x = year, y = model, group = strata, color = strata)) +
-      geom_line(data = filter(overall_data, variable %!in% c('a1c', 'CHOL_all', 'flu', 'foot')),
-                  aes(x = year, y = model),
-                  color = 'black',
-                  linetype = 'dashed') +
-      facet_wrap( ~ variable_text, ncol = 3) +
-      theme_classic() +
-      scale_y_continuous(
-        limits = c(  0, 100),
-        breaks = seq(0, 100, 25),
-        labels = seq(0, 100, 25)
-      ) +
-      scale_x_continuous(
-        limits = c(2008, 2020),
-        breaks = seq(2008, 2020, 2),
-        labels = seq(2008, 2020, 2)
-      ) +
-      scale_color_brewer(type = 'qual', palette = 'Set2') +
-      theme(axis.text = element_text(color = 'black'),
-            axis.text.x = element_text(angle = 45, hjust = 0.9, vjust = 0.95),
-            legend.title = element_text(size = 8),
-            legend.text = element_text(size = 6)) +
-      labs(x = 'Year', y = 'Percentage')
-  )
-
-exam_plots1[[1]] <- exam_plots1[[1]] + labs(color = 'Age (grouped)') +
-  theme(axis.title.x = element_blank())
-exam_plots1[[2]] <-
-  exam_plots1[[2]] + labs(color = 'Highest degree \nobtained') + theme(
-    strip.background =  element_blank(),
-    strip.text = element_blank(),
-    axis.title.x = element_blank()
-  )
-exam_plots1[[3]] <-
-  exam_plots1[[3]] + labs(color = "Insurance") + theme(
-    strip.background =  element_blank(),
-    strip.text = element_blank(),
-    axis.title.x = element_blank()
-  )
-exam_plots1[[4]] <-
-  exam_plots1[[4]] + labs(color = 'Poverty income ratio') + theme(
-    strip.background =  element_blank(),
-    strip.text = element_blank()
-  )
-exam_plots1[[5]] <-
-  exam_plots1[[5]] + labs(color = 'Race & Ethnicity') + theme(
-    strip.background =  element_blank(),
-    strip.text = element_blank(),
-    axis.title.x = element_blank()
-  )
-exam_plots1[[6]] <-
-  exam_plots1[[6]] + labs(color = 'Sex') + theme(strip.background =  element_blank(),
-                                                strip.text = element_blank(),
-    axis.title.x = element_blank())
-exam_plots1 <- list(
-  exam_plots1[[1]],
-  exam_plots1[[6]],
-  exam_plots1[[5]],
-  exam_plots1[[2]],
-  exam_plots1[[3]],
-  exam_plots1[[4]]
-)
-```
-
-
-```{r}
-#| fig-height: 9
-#| fig-width: 6
-(all_exam_plots1 <- exam_plots1 %>% 
-  wrap_plots(nrow = 6) &
-  theme(plot.margin = margin(0.5, 0.5, 0.5, 0.5, 'pt')))
-```
-
-```{r}
-#| fig-height: 9
-#| fig-width: 6
-
-(all_test_plots1 <- test_plots1 %>% 
-  wrap_plots(nrow = 6) &
-  theme(plot.margin = margin(0.5, 0.5, 0.5, 0.5, 'pt')))
-```
-
-```{r}
-#| fig-height: 9
-#| fig-width: 6
-
-(all_test_plots2 <- test_plots2 %>% 
-  wrap_plots(nrow = 6) &
-  theme(plot.margin = margin(0.5, 0.5, 0.5, 0.5, 'pt')))
-```
-
-

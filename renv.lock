@@ -562,7 +562,7 @@
       "RemoteRef": "master",
       "RemoteSha": "fa6338c843a65b09f430cad2cb84f73708ee5d7e",
       "Remotes": "R4EPI/epidict, R4EPI/epikit",
-      "Hash": "82c2e0773eda877df44e35aa65652076",
+      "Hash": "237e3c4e054297f25d2366be4b71fe4d",
       "Requirements": [
         "dplyr",
         "epikit",
@@ -856,6 +856,24 @@
         "vctrs"
       ]
     },
+    "grateful": {
+      "Package": "grateful",
+      "Version": "0.1.11",
+      "Source": "GitHub",
+      "RemoteType": "github",
+      "RemoteHost": "api.github.com",
+      "RemoteRepo": "grateful",
+      "RemoteUsername": "Pakillo",
+      "RemoteRef": "HEAD",
+      "RemoteSha": "ba9b003e74d03d120f61e5ad73711ed9f1be6f8b",
+      "Hash": "68c709d127acd63adeef3e8f03fd0454",
+      "Requirements": [
+        "knitr",
+        "remotes",
+        "renv",
+        "rmarkdown"
+      ]
+    },
     "gt": {
       "Package": "gt",
       "Version": "0.8.0",
@@ -968,13 +986,14 @@
     },
     "htmltools": {
       "Package": "htmltools",
-      "Version": "0.5.3",
+      "Version": "0.5.4",
       "Source": "Repository",
       "Repository": "CRAN",
-      "Hash": "6496090a9e00f8354b811d1a2d47b566",
+      "Hash": "9d27e99cc90bd701c0a7a63e5923f9b7",
       "Requirements": [
         "base64enc",
         "digest",
+        "ellipsis",
         "fastmap",
         "rlang"
       ]
@@ -1261,6 +1280,32 @@
       "Hash": "6dfe8bf774944bd5595785e3229d8771",
       "Requirements": [
         "colorspace"
+      ]
+    },
+    "nih.joinpoint": {
+      "Package": "nih.joinpoint",
+      "Version": "0.1.0.9001",
+      "Source": "GitHub",
+      "RemoteType": "github",
+      "RemoteHost": "api.github.com",
+      "RemoteUsername": "DanChaltiel",
+      "RemoteRepo": "nih.joinpoint",
+      "RemoteRef": "main",
+      "RemoteSha": "8dae4663119c27e852449d8ba19e247e9fbee059",
+      "Hash": "0f562619ca158de42dd5788d2c3cd639",
+      "Requirements": [
+        "dplyr",
+        "forcats",
+        "ggplot2",
+        "glue",
+        "janitor",
+        "patchwork",
+        "purrr",
+        "readr",
+        "rlang",
+        "tibble",
+        "tidyselect",
+        "zoo"
       ]
     },
     "nlme": {
@@ -1755,7 +1800,7 @@
       "RemoteRef": "master",
       "RemoteSha": "75c86a71a8554cc9da5804e2dc26d4ed452b550d",
       "Remotes": "R4EPI/apyramid, R4EPI/epitabulate, R4EPI/epidict, R4EPI/epikit",
-      "Hash": "996eee677c7912bf6e132398e614aff6",
+      "Hash": "fb1fff4747a2dce49a35f558eaece4da",
       "Requirements": [
         "anthro",
         "apyramid",
@@ -2220,6 +2265,16 @@
       "Repository": "CRAN",
       "Hash": "c42bfcec3fa6a0cce17ce1f8bc684f88",
       "Requirements": []
+    },
+    "zoo": {
+      "Package": "zoo",
+      "Version": "1.8-11",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "874a5b77fe0cfacf2a3450069ae70926",
+      "Requirements": [
+        "lattice"
+      ]
     }
   }
 }
