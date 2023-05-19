@@ -16,3 +16,275 @@ Both males and females showed decreasing percentages of adults receiving three o
 ## Trends for each preventive care practice
 
 @fig-exams and @fig-tests show the trends for individual preventive care practices and indicate which trends were significantly increasing or decreasing, or had segments that were significantly increasing or decreasing. Estimates plotted in @fig-exams can be found in the table in Appendix 1. Trends for all adults with diabetes receiving a foot examination  decreased starting in 2011 (@fig-exams). The percent of adults getting a flu vaccine increased until 2013 then began to decrease (@fig-tests). The shape of the trends in subgroups tend to mirror the overall trend for each practice, although the year at which trend values change may differ among these subgroups. The trend in some subgroups for each preventive practice do not always follow the shape of the overall trend, however. For example, the overall trend in the percentage of adults with diabetes receiving an eye examination with dilation was flat over 2008 to 2019. Within the income poverty ratio subgroups, only those in the highest poverty income ratio group (\> 400%) deviate from this flat trend by first increasing, then decreasing starting in 2013 (@fig-exams). Different groups exhibit different amounts of variation among the categories in each group. For example, the trends for all six practices split by sex tend to be very similar, whereas the gaps between the different insurance group trends are larger. 
+
+
+         ` ` = as.factor(` `) %>% fct_relevel('Overall',
+                           'Age: 18 to 44',
+                           'Age: 45 to 64',
+                           'Age: 65 to 74',
+                           'Age: 75+',
+                           'Sex: Female',
+                           'Sex: Male',
+                           'Race/Ethnicity: Asian/Not Hispanic',
+                           'Race/Ethnicity: Black/Not Hispanic',
+                           'Race/Ethnicity: Hispanic',
+                           'Race/Ethnicity: White/Not Hispanic',
+                           'Highest degree earned: Greater than high school',
+                           'Highest degree earned: High school',
+                           'Highest degree earned: Less than high school',
+                           'Insurance coverage: Medicaid',
+                           'Insurance coverage: Medicare only',
+                           'Insurance coverage: Private only',
+                           'Insurance coverage: Uninsured',
+                           'Poverty income ratio: > 400%',
+                           'Poverty income ratio: 200% - 399%',
+                           'Poverty income ratio: 100% - 199%',
+                           'Poverty income ratio: < 100%')) %>% 
+
+
+# This code here changes the apc values to NA if they aren't significant, but I think
+    # what I need to do is change the APC values if there are no identified joinpoints
+    # across(
+    #   c(apc_0, apc_95_lcl_0, apc_95_ucl_0),
+    #   ~ case_when(p_value_0 > 0.05 &
+    #                 p_value_1 > 0.05 & p_value_2 > 0.05 & p_value_3 > 0.05 ~ NA_real_,
+    #               TRUE ~ .x)
+    # ),
+    # across(
+    #   c(apc_1, apc_95_lcl_1, apc_95_ucl_1),
+    #   ~ case_when(p_value_0 > 0.05 &
+    #                 p_value_1 > 0.05 & p_value_2 > 0.05 & p_value_3 > 0.05 ~ NA_real_,
+    #               TRUE ~ .x)
+    # ),
+    # across(
+    #   c(apc_2, apc_95_lcl_2, apc_95_ucl_2),
+    #   ~ case_when(p_value_0 > 0.05 &
+    #                 p_value_1 > 0.05 & p_value_2 > 0.05 & p_value_3 > 0.05 ~ NA_real_,
+    #               TRUE ~ .x)
+    # ),
+    # across(
+    #   c(apc_3, apc_95_lcl_3, apc_95_ucl_3),
+    #   ~ case_when(p_value_0 > 0.05 &
+    #                 p_value_1 > 0.05 & p_value_2 > 0.05 & p_value_3 > 0.05 ~ NA_real_,
+    #               TRUE ~ .x)
+    # ),
+
+
+
+```{r all-plots}
+
+
+stats_table_plot_dat <- jp_proportion_plot_data %>%
+  mutate(model = as.numeric(model)) %>% 
+  filter(strata != 'Total') %>%
+  filter(strata != 'Not available') %>% 
+  filter(strata != 'Other Race/Not Hispanic') %>% 
+  filter(strata != 'Other') %>% 
+  mutate(variable_text = case_when(variable == 'a1c' ~ 'Two or more A1C tests',
+                                   variable == 'CHOL_all' ~ 'Cholesterol tested',
+                                   variable == 'DENT_all' ~ 'One or more dentist visits',
+                                   variable == 'eye-exam' ~ 'Eye exam with dilation',
+                                   variable == 'flu' ~ 'Received flu vaccine',
+                                   variable == 'foot' ~ 'Foot examination'),
+         strata = case_when(strata == 'stat_0' ~ 'Overall',
+                            TRUE ~ strata)) %>% 
+  mutate(strata = as.factor(strata)) %>% 
+  split(., f = .$stratifier)
+
+stats_table_plot_dat <- map(stats_table_plot_dat, function(.x) {
+  .x %>% 
+    mutate(strata = fct_drop(strata))
+})
+
+
+overall_data <- stats_table_plot_dat$overall %>% 
+  mutate(strata = case_when(strata == 'Overall' ~ 'z'))
+# Remove the overall data from the list
+stats_table_plot_dat <- stats_table_plot_dat[-4]
+# Relevel the poverty factors
+stats_table_plot_dat$poverty$strata <-
+  factor(
+    stats_table_plot_dat$poverty$strata,
+    levels = c('High income', 'Middle income', 'Low income', 'Poor/Negative'),
+    labels = c(
+      '> 400% ',
+      '200% - 399%',
+      '100% - 199%',
+      '< 100%'
+      
+    )
+  )
+test_plots <- stats_table_plot_dat %>% 
+   map(
+    ~ ggplot(filter(.x, variable %in% c('a1c', 'CHOL_all', 'flu')),
+             aes(
+      x = year,
+      y = p,
+      group = strata,
+      color = strata
+    )) +
+      #geom_point() +
+      geom_line(aes(x = year, y = model, group = strata, color = strata)) +
+      geom_line(data = filter(overall_data, variable %in% c('a1c', 'CHOL_all', 'flu')),
+                  aes(x = year, y = model),
+                  color = 'black',
+                  linetype = 'dashed') +
+      facet_wrap( ~ variable_text, ncol = 3) +
+      theme_classic() +
+      scale_y_continuous(
+        limits = c(00, 100),
+        breaks = seq(0, 100, 25),
+        labels = seq(0, 100, 25)
+      ) +
+      scale_x_continuous(
+        limits = c(2008, 2020),
+        breaks = seq(2008, 2020, 2),
+        labels = seq(2008, 2020, 2)
+      ) +
+      scale_color_brewer(type = 'qual', palette = 'Set2') +
+      theme(axis.text = element_text(color = 'black'),
+            axis.text.x = element_text(angle = 45, hjust = 0.9, vjust = 0.95),
+            legend.title = element_text(size = 8),
+            legend.text = element_text(size = 6)) +
+      labs(x = 'Year', y = 'Percentage')
+  )
+
+test_plots[[1]] <- test_plots[[1]] + labs(color = 'Age (grouped)') +
+  theme(axis.title.x = element_blank())
+test_plots[[2]] <-
+  test_plots[[2]] + labs(color = 'Highest degree \nobtained') + theme(
+    strip.background =  element_blank(),
+    strip.text = element_blank(),
+    axis.title.x = element_blank()
+  )
+test_plots[[3]] <-
+  test_plots[[3]] + labs(color = "Insurance") + theme(
+    strip.background =  element_blank(),
+    strip.text = element_blank(),
+    axis.title.x = element_blank()
+  )
+test_plots[[4]] <-
+  test_plots[[4]] + labs(color = 'Poverty income ratio') + theme(
+    strip.background =  element_blank(),
+    strip.text = element_blank()
+  )
+test_plots[[5]] <-
+  test_plots[[5]] + labs(color = 'Race & Ethnicity') + theme(
+    strip.background =  element_blank(),
+    strip.text = element_blank(),
+    axis.title.x = element_blank()
+  )
+test_plots[[6]] <-
+  test_plots[[6]] + labs(color = 'Sex') + theme(strip.background =  element_blank(),
+                                                strip.text = element_blank(),
+    axis.title.x = element_blank())
+test_plots <- list(
+  test_plots[[1]],
+  test_plots[[6]],
+  test_plots[[5]],
+  test_plots[[2]],
+  test_plots[[3]],
+  test_plots[[4]]
+)
+
+exam_plots <- stats_table_plot_dat %>% 
+   map(
+    ~ ggplot(filter(.x, variable %!in% c('a1c', 'CHOL_all', 'flu')),
+             aes(
+      x = year,
+      y = p,
+      group = strata,
+      color = strata
+    )) +
+      #geom_point() +
+      geom_line(aes(x = year, y = model, group = strata, color = strata)) +
+      geom_line(data = filter(overall_data, variable %!in% c('a1c', 'CHOL_all', 'flu')),
+                  aes(x = year, y = model),
+                  color = 'black',
+                  linetype = 'dashed') +
+      facet_wrap( ~ variable_text, ncol = 3) +
+      theme_classic() +
+      scale_y_continuous(
+        limits = c(  0, 100),
+        breaks = seq(0, 100, 25),
+        labels = seq(0, 100, 25)
+      ) +
+      scale_x_continuous(
+        limits = c(2008, 2020),
+        breaks = seq(2008, 2020, 2),
+        labels = seq(2008, 2020, 2)
+      ) +
+      scale_color_brewer(type = 'qual', palette = 'Set2') +
+      theme(axis.text = element_text(color = 'black'),
+            axis.text.x = element_text(angle = 45, hjust = 0.9, vjust = 0.95),
+            legend.title = element_text(size = 8),
+            legend.text = element_text(size = 7)) +
+      labs(x = 'Year', y = 'Percentage')
+  )
+
+exam_plots[[1]] <- exam_plots[[1]] + labs(color = 'Age (grouped)') +
+  theme(axis.title.x = element_blank())
+exam_plots[[2]] <-
+  exam_plots[[2]] + labs(color = 'Highest degree \nobtained') + theme(
+    strip.background =  element_blank(),
+    strip.text = element_blank(),
+    axis.title.x = element_blank()
+  )
+exam_plots[[3]] <-
+  exam_plots[[3]] + labs(color = "Insurance") + theme(
+    strip.background =  element_blank(),
+    strip.text = element_blank(),
+    axis.title.x = element_blank()
+  )
+exam_plots[[4]] <-
+  exam_plots[[4]] + labs(color = 'Poverty income ratio') + theme(
+    strip.background =  element_blank(),
+    strip.text = element_blank()
+  )
+exam_plots[[5]] <-
+  exam_plots[[5]] + labs(color = 'Race & Ethnicity') + theme(
+    strip.background =  element_blank(),
+    strip.text = element_blank(),
+    axis.title.x = element_blank()
+  )
+exam_plots[[6]] <-
+  exam_plots[[6]] + labs(color = 'Sex') + theme(strip.background =  element_blank(),
+                                                strip.text = element_blank(),
+    axis.title.x = element_blank())
+exam_plots <- list(
+  exam_plots[[1]],
+  exam_plots[[6]],
+  exam_plots[[5]],
+  exam_plots[[2]],
+  exam_plots[[3]],
+  exam_plots[[4]]
+)
+
+# all_exam_plots <- exam_plots %>% 
+#   wrap_plots(nrow = 6) &
+#   theme(plot.margin = margin(0.5, 0.5, 0.5, 0.5, 'pt'))
+# all_test_plots <- test_plots %>% 
+#   wrap_plots(nrow = 6) &
+#   theme(plot.margin = margin(0.5, 0.5, 0.5, 0.5, 'pt'))
+```
+
+
+Youngest age group was consistently lower than all others for cholesterol testing and receiving flu vaccine, and eye exam and foot exam
+
+Hispanic - lowest, although close for cholesterol and A1C (A1C until \~ 2018). And eye exam, but again real close
+
+\< HS consistently lower on all exams and A1c tests Uninsured lower on everything
+
+Flu - lots of increases. Hung et al found no change over 2007 - 2018 using NHIS data
+
+Cholesterol - a few decreases
+
+A1C - a few increases
+
+Dentists - kind of all over the place; Aldosari 2022 found no difference in utilization between people with diabetes and without (so not a trend analysis). Luo et al 2018 found declines for people with diabetes from 2004 - 2014
+
+Foot exams - mostly all flat, except older. PEraj 2019 found that Hispanic americans and asian-americans were significantly less likely to have a foot exam
+
+Eye exams - mostly flat or decreasing, except uninsured. Chen 2020 found there were increases after Medicaid expansion but only for the first two years. Eppley 2019 found no change in adherance from 2005 to 2016 using NHANES
+
+Mostly flat, some decreases.
