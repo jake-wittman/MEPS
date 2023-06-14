@@ -92,7 +92,7 @@ list(
   ),
   tar_target(
     diab_dat,
-    cumulativePractices(diab_dat_sub)
+    cumulativeServices(diab_dat_sub)
   ),
   tar_target(diab_list,
              diab_dat %>% group_split(year),
@@ -549,7 +549,7 @@ list(
         'Once a year or more'
       )
       ) %>%
-      filter(strata %!in% c('Not available', 'Other Race/Not Hispanic'))
+      filter(strata %!in% c('Not available', 'Other Race/not Hispanic'))
   ),
   tar_target(
     stats_table,
@@ -657,7 +657,7 @@ list(
   #                              'YES'
   #                            ))),
 
-# Age adjust preventive practices ------------------------------------
+# Age adjust preventive services ------------------------------------
   tar_target(
     overall_preventive,
     diab_list %>%
@@ -668,7 +668,7 @@ list(
         nest = TRUE
       ) %>%
       svystandardize(., ~ AGE_all, ~1, population = c(0.530535, 0.299194, 0.088967, 0.081304)) %>%
-      preventivePractice(., by = NULL, diab_list) %>%
+      preventiveService(., by = NULL, diab_list) %>%
       makePreventiveTablesLonger(),
     pattern = map(diab_list)
   ),
@@ -682,7 +682,7 @@ list(
         nest = TRUE
       ) %>%
       svystandardize(., ~ AGE_all, ~1, population = c(0.530535, 0.299194, 0.088967, 0.081304)) %>%
-      preventivePractice(., by = 'SEX', diab_list) %>%
+      preventiveService(., by = 'SEX', diab_list) %>%
       makePreventiveTablesLonger(),
     pattern = map(diab_list)
   ),
@@ -696,7 +696,7 @@ list(
         nest = TRUE
       ) %>%
       svystandardize(., ~ AGE_all, ~1, population = c(0.530535, 0.299194, 0.088967, 0.081304)) %>%
-      preventivePractice(., by = 'RACE_all', diab_list) %>%
+      preventiveService(., by = 'RACE_all', diab_list) %>%
       makePreventiveTablesLonger(),
     pattern = map(diab_list)
   ),
@@ -710,7 +710,7 @@ list(
         nest = TRUE
       ) %>%
       svystandardize(., ~ AGE_all, ~1, population = c(0.530535, 0.299194, 0.088967, 0.081304)) %>%
-      preventivePractice(., by = 'HIDEG_all', diab_list) %>%
+      preventiveService(., by = 'HIDEG_all', diab_list) %>%
       makePreventiveTablesLonger(),
     pattern = map(diab_list)
   ),
@@ -724,7 +724,7 @@ list(
         nest = TRUE
       ) %>%
       svystandardize(., ~ AGE_all, ~1, population = c(0.530535, 0.299194, 0.088967, 0.081304)) %>%
-      preventivePractice(., by = 'AGE_all', diab_list) %>%
+      preventiveService(., by = 'AGE_all', diab_list) %>%
       makePreventiveTablesLonger(),
     pattern = map(diab_list)
   ),
@@ -738,7 +738,7 @@ list(
         nest = TRUE
       ) %>%
       svystandardize(., ~ AGE_all, ~1, population = c(0.530535, 0.299194, 0.088967, 0.081304)) %>%
-      preventivePractice(., by = 'POVCAT_all', diab_list) %>%
+      preventiveService(., by = 'POVCAT_all', diab_list) %>%
       makePreventiveTablesLonger(),
     pattern = map(diab_list)
   ),
@@ -753,7 +753,7 @@ list(
         nest = TRUE
       ) %>%
       svystandardize(., ~ AGE_all, ~1, population = c(0.530535, 0.299194, 0.088967, 0.081304)) %>%
-      preventivePractice(., by = 'INSCOV_all', diab_list) %>%
+      preventiveService(., by = 'INSCOV_all', diab_list) %>%
       makePreventiveTablesLonger(),
     pattern = map(diab_list)
   ),
@@ -782,7 +782,7 @@ list(
     age_adjusted_stats %>%
       filter(strata != 'Total') %>%
       filter(strata != 'Not available') %>%
-      filter(strata != 'Other Race/Not Hispanic') %>%
+      filter(strata != 'Other Race/not Hispanic') %>%
       mutate(variable_text = case_when(variable == 'a1c' ~ '2 or more A1C tests',
                                        variable == 'CHOL_all' ~ 'Cholesterol tested',
                                        variable == 'DENT_all' ~ '1 or more dentist visits',
@@ -801,7 +801,7 @@ list(
     age_adjusted_preventive %>%
       filter(strata != 'Total') %>%
       filter(strata != 'Not available') %>%
-      filter(strata != 'Other Race/Not Hispanic') %>%
+      filter(strata != 'Other Race/not Hispanic') %>%
       mutate(variable_text = case_when(variable == 'a1c' ~ '2 or more A1C tests',
                                        variable == 'CHOL_all' ~ 'Cholesterol tested',
                                        variable == 'DENT_all' ~ '1 or more dentist visits',
@@ -819,10 +819,10 @@ list(
     jp_proportion_lines,
     map2(jp_regressions_proportions, names(jp_regressions_proportions), function(.x, .y) {
       .x$report %>%
-        mutate(group.practice = .y)
+        mutate(group.service = .y)
     }) %>%
       bind_rows() %>%
-      separate(group.practice, c('stratifier', 'practice'), sep = '[.]') %>%
+      separate(group.service, c('stratifier', 'service'), sep = '[.]') %>%
       mutate(strata = case_when(stratifier == 'overall' ~ 'stat_0',
                                 TRUE ~ strata)) %>%
       mutate(stratifier = factor(stratifier,
@@ -847,9 +847,9 @@ list(
     map(jp_regressions_preventive, function(.x, .y) {
       .x$aapc
     }) %>%
-      bind_rows(.id = 'group.practice') %>%
-      filter(str_detect(group.practice, 'atleast_three')) %>%
-      separate(group.practice, c('stratifier', 'practice'), sep = '[.]') %>%
+      bind_rows(.id = 'group.service') %>%
+      filter(str_detect(group.service, 'atleast_three')) %>%
+      separate(group.service, c('stratifier', 'service'), sep = '[.]') %>%
       mutate(strata = case_when(stratifier == 'overall' ~ 'stat_0',
                                 TRUE ~ strata)) %>%
       mutate(stratifier = factor(stratifier,
@@ -874,9 +874,9 @@ tar_target(
   map(jp_regressions_preventive, function(.x, .y) {
     .x$apc
   }) %>%
-    bind_rows(.id = 'group.practice') %>%
-    filter(str_detect(group.practice, 'atleast_three')) %>%
-    separate(group.practice, c('stratifier', 'practice'), sep = '[.]') %>%
+    bind_rows(.id = 'group.service') %>%
+    filter(str_detect(group.service, 'atleast_three')) %>%
+    separate(group.service, c('stratifier', 'service'), sep = '[.]') %>%
     mutate(strata = case_when(stratifier == 'overall' ~ 'stat_0',
                               TRUE ~ strata)) %>%
     mutate(stratifier = factor(stratifier,
@@ -904,9 +904,9 @@ tar_target(
                joinpoints = as.character(joinpoints),
                final_selected_model = as.character(final_selected_model))) %>%
     map2(., names(.), ~.x %>%
-            mutate(stratifier.practice = .y)) %>%
+            mutate(stratifier.service = .y)) %>%
     bind_rows() %>%
-    separate(stratifier.practice, c('stratifier', 'variable'), sep = '[.]') %>%
+    separate(stratifier.service, c('stratifier', 'variable'), sep = '[.]') %>%
     ungroup()
 ),
 
@@ -916,7 +916,7 @@ tar_target(
   age_adjusted_stats %>%
     filter(strata != 'Total') %>%
     filter(strata != 'Not available') %>%
-    filter(strata != 'Other Race/Not Hispanic') %>%
+    filter(strata != 'Other Race/not Hispanic') %>%
     filter(year <= 2019) %>%
     mutate(variable_text = case_when(variable == 'a1c' ~ '2 or more A1C tests',
                                      variable == 'CHOL_all' ~ 'Cholesterol tested',
@@ -936,7 +936,7 @@ tar_target(
   age_adjusted_preventive %>%
     filter(strata != 'Total') %>%
     filter(strata != 'Not available') %>%
-    filter(strata != 'Other Race/Not Hispanic') %>%
+    filter(strata != 'Other Race/not Hispanic') %>%
     filter(year <= 2019) %>%
     mutate(variable_text = case_when(variable == 'a1c' ~ '2 or more A1C tests',
                                      variable == 'CHOL_all' ~ 'Cholesterol tested',
@@ -955,10 +955,10 @@ tar_target(
   jp_proportion_lines_sans_2020,
   map2(jp_regressions_proportions_sans_2020, names(jp_regressions_proportions_sans_2020), function(.x, .y) {
     .x$report %>%
-      mutate(group.practice = .y)
+      mutate(group.service = .y)
   }) %>%
     bind_rows() %>%
-    separate(group.practice, c('stratifier', 'practice'), sep = '[.]') %>%
+    separate(group.service, c('stratifier', 'service'), sep = '[.]') %>%
     mutate(strata = case_when(stratifier == 'overall' ~ 'stat_0',
                               TRUE ~ strata)) %>%
     mutate(stratifier = factor(stratifier,
@@ -983,9 +983,9 @@ tar_target(
   map(jp_regressions_preventive_sans_2020, function(.x, .y) {
     .x$aapc
   }) %>%
-    bind_rows(.id = 'group.practice') %>%
-    filter(str_detect(group.practice, 'atleast_three')) %>%
-    separate(group.practice, c('stratifier', 'practice'), sep = '[.]') %>%
+    bind_rows(.id = 'group.service') %>%
+    filter(str_detect(group.service, 'atleast_three')) %>%
+    separate(group.service, c('stratifier', 'service'), sep = '[.]') %>%
     mutate(strata = case_when(stratifier == 'overall' ~ 'stat_0',
                               TRUE ~ strata)) %>%
     mutate(stratifier = factor(stratifier,
@@ -1010,9 +1010,9 @@ tar_target(
   map(jp_regressions_preventive_sans_2020, function(.x, .y) {
     .x$apc
   }) %>%
-    bind_rows(.id = 'group.practice') %>%
-    filter(str_detect(group.practice, 'atleast_three')) %>%
-    separate(group.practice, c('stratifier', 'practice'), sep = '[.]') %>%
+    bind_rows(.id = 'group.service') %>%
+    filter(str_detect(group.service, 'atleast_three')) %>%
+    separate(group.service, c('stratifier', 'service'), sep = '[.]') %>%
     mutate(strata = case_when(stratifier == 'overall' ~ 'stat_0',
                               TRUE ~ strata)) %>%
     mutate(stratifier = factor(stratifier,
@@ -1040,9 +1040,9 @@ tar_target(
                joinpoints = as.character(joinpoints),
                final_selected_model = as.character(final_selected_model))) %>%
     map2(., names(.), ~.x %>%
-           mutate(stratifier.practice = .y)) %>%
+           mutate(stratifier.service = .y)) %>%
     bind_rows() %>%
-    separate(stratifier.practice, c('stratifier', 'variable'), sep = '[.]') %>%
+    separate(stratifier.service, c('stratifier', 'variable'), sep = '[.]') %>%
     ungroup()
 ),
 tar_target(
@@ -1050,8 +1050,8 @@ tar_target(
   map(jp_regressions_proportions_sans_2020, function(.x, .y) {
     .x$aapc
   }) %>%
-    bind_rows(.id = 'group.practice') %>%
-    separate(group.practice, c('stratifier', 'practice'), sep = '[.]') %>%
+    bind_rows(.id = 'group.service') %>%
+    separate(group.service, c('stratifier', 'service'), sep = '[.]') %>%
     mutate(strata = case_when(stratifier == 'overall' ~ 'stat_0',
                               TRUE ~ strata)) %>%
     mutate(stratifier = factor(stratifier,
@@ -1076,8 +1076,8 @@ tar_target(
   map(jp_regressions_proportions_sans_2020, function(.x, .y) {
     .x$apc
   }) %>%
-    bind_rows(.id = 'group.practice') %>%
-    separate(group.practice, c('stratifier', 'practice'), sep = '[.]') %>%
+    bind_rows(.id = 'group.service') %>%
+    separate(group.service, c('stratifier', 'service'), sep = '[.]') %>%
     mutate(strata = case_when(stratifier == 'overall' ~ 'stat_0',
                               TRUE ~ strata)) %>%
     mutate(stratifier = factor(stratifier,

@@ -6,7 +6,7 @@ format:
     reference-doc: template.docx
 editor: source
 bibliography: references.bib
-csl: ama.csl
+csl: diabetes-care2.csl
 execute:
   echo: false
   warning: false
@@ -59,21 +59,33 @@ pullNumber <- function(data, filter.by, column, brackets = FALSE) {
   out
 }
 # For other tables that don't use such weird column names
-pullNumber2 <- function(data, select.column, brackets = FALSE, ...) {
-  browser()
-   out <- data %>% 
-    ungroup() %>% 
-    filter(...) %>% 
-    pull( {{select.column}} )
-    out <- gsub("\\(", "(95% CI: ", out)
-    out <- gsub("(-?\\d+\\.\\d+)", "\\1%", out)
-  if (brackets == TRUE) {
-    out <- out %>% 
-    str_replace("\\(", "\\[") %>% 
-    str_replace("\\)", "\\]")
+pullNumber2 <-
+  function(data, select.column, brackets = FALSE, CI = FALSE, ...) {
+    
+    out <- data %>%
+      ungroup() %>%
+      filter(...) %>%
+      pull({
+        {
+          select.column
+        }
+      })
+    out <- gsub("-", "—", out)
+    out <- gsub("–", "—", out)
+    if (CI == TRUE) {
+      out <- gsub("\\(", "(95% CI: ", out)
+      out <- gsub("(-?\\d+\\.\\d+)", "\\1%", out)
+    } else {
+      out <- gsub("(-?\\d+\\.\\d+)", "\\1%", out)
+    }
+    if (brackets == TRUE) {
+      out <- out %>%
+        str_replace("\\(", "\\[") %>%
+        str_replace("\\)", "\\]")
+    }
+    out
   }
-  out
-}
+
 
 # Some numbers pulled from MEPS page:
 sample_size_response_rate <- tibble(
@@ -148,8 +160,8 @@ cleaned_jp_apc <- jp_prevention_apc %>%
 
 # Clean up the age adjusted preventive services and then join with the aapc table
 clean_age_adjusted <- age_adjusted_preventive %>% 
-  # Filter to just the >=3 practices
-  filter(variable == 'zero_practices') %>% 
+  # Filter to just the >=3 services
+  filter(variable == 'zero_services') %>% 
   # Filter down to every other year
   filter(year %in% seq(2000, 2020, by = 1)) %>% 
   mutate(chr_age_adj_prop = sigfig(p, digits = 3),
@@ -162,7 +174,7 @@ clean_age_adjusted <- age_adjusted_preventive %>%
     values_from = c(p, percentage, p.std.error),
   ) %>% 
   # Remove excess strata
-  filter(strata %!in% c('Not available', 'Other Race/Not Hispanic')) %>% 
+  filter(strata %!in% c('Not available', 'Other Race/not Hispanic')) %>% 
   # Relevel stratifier factor, clean up stratifier and strata names
   mutate(stratifier = factor(stratifier,
                              c('overall', 'age', 'sex', 'race', 'edu', 'insurance', 'poverty')),
@@ -202,13 +214,13 @@ cleaned_preventive_df <- left_join(clean_age_adjusted, cleaned_jp_apc, by = c('s
                                     TRUE ~ `APC Period 1`)) %>%
   # Rename poverty levels
   mutate(strata = case_when(as.character(strata) == 'Poor/Negative' ~ '< 100%',
-                            as.character(strata) == 'Low income' ~ '100% - 199%',
-                            as.character(strata) == 'Middle income' ~ '200% - 399%',
+                            as.character(strata) == 'Low income' ~ '100%—199%',
+                            as.character(strata) == 'Middle income' ~ '200%—399%',
                             as.character(strata) == 'High income' ~ '> 400%',
                             TRUE ~ as.character(strata))) 
 
 # Rename strata to a blank name to remove it from the final table
-preventive_practice_table <- cleaned_preventive_df %>% 
+preventive_service_table <- cleaned_preventive_df %>% 
   filter(strata != 'Other') %>% 
   group_by(stratifier) %>%
   select(stratifier, ` ` = strata, `2008`:`2020`, `Percent Change (95% CI)`, `Joinpoint Year` = segment,
@@ -236,8 +248,8 @@ preventive_practice_table <- cleaned_preventive_df %>%
   sub_missing(missing_text = ' ')
 
 # Reorganize insurance variables
-preventive_practice_table$`_data` <- preventive_practice_table$`_data`[c(1:14, 15, 18, 16, 17, 19:22), ]
-tab1 <- preventive_practice_table$`_data`
+preventive_service_table$`_data` <- preventive_service_table$`_data`[c(1:14, 15, 18, 16, 17, 19:22), ]
+tab1 <- preventive_service_table$`_data`
 ```
 
 ```{r preventive-table-sans-2020}
@@ -296,10 +308,10 @@ cleaned_jp_apc_sans_2020 <- jp_prevention_apc_sans_2020 %>%
   ) %>%
   select(stratifier, strata, segment, starts_with('APC '))
 
-# Clean up the age adjusted preventive practices and then join with the aapc table
+# Clean up the age adjusted preventive services and then join with the aapc table
 clean_age_adjusted <- age_adjusted_preventive %>% 
-  # Filter to just the >=3 practices
-  filter(variable == 'zero_practices') %>% 
+  # Filter to just the >=3 services
+  filter(variable == 'zero_services') %>% 
   # Filter down to every other year
   filter(year %in% seq(2000, 2020, by = 1)) %>% 
   mutate(chr_age_adj_prop = specifyDecimal(p, digits = 1),
@@ -312,7 +324,7 @@ clean_age_adjusted <- age_adjusted_preventive %>%
     values_from = c(p, percentage, p.std.error),
   ) %>% 
   # Remove excess strata
-  filter(strata %!in% c('Not available', 'Other Race/Not Hispanic')) %>% 
+  filter(strata %!in% c('Not available', 'Other Race/not Hispanic')) %>% 
   # Relevel stratifier factor, clean up stratifier and strata names
   mutate(stratifier = factor(stratifier,
                              c('overall', 'age', 'sex', 'race', 'edu', 'insurance', 'poverty')),
@@ -352,13 +364,13 @@ cleaned_preventive_df_sans_2020 <- left_join(clean_age_adjusted, cleaned_jp_apc_
                                     TRUE ~ `APC Period 1`)) %>%
   # Rename poverty levels
   mutate(strata = case_when(as.character(strata) == 'Poor/Negative' ~ '< 100%',
-                            as.character(strata) == 'Low income' ~ '100% - 199%',
-                            as.character(strata) == 'Middle income' ~ '200% - 399%',
+                            as.character(strata) == 'Low income' ~ '100%—199%',
+                            as.character(strata) == 'Middle income' ~ '200%—399%',
                             as.character(strata) == 'High income' ~ '> 400%',
                             TRUE ~ as.character(strata))) 
 
 # Rename strata to a blank name to remove it from the final table
-preventive_practice_table_sans_2020 <- cleaned_preventive_df_sans_2020 %>% 
+preventive_service_table_sans_2020 <- cleaned_preventive_df_sans_2020 %>% 
   filter(strata != 'Other') %>% 
   group_by(stratifier) %>%
   select(stratifier, ` ` = strata, `2008`:`2020`, `Percent Change (95% CI)`, `Joinpoint Year` = segment,
@@ -395,10 +407,10 @@ preventive_practice_table_sans_2020 <- cleaned_preventive_df_sans_2020 %>%
   ) %>% 
   tab_options(footnotes.marks = "a")
 # Reorganize insurance variables
- preventive_practice_table_sans_2020$`_data` <- preventive_practice_table_sans_2020$`_data`[c(1:14, 15, 18, 16, 17, 19:22), ]
+ preventive_service_table_sans_2020$`_data` <- preventive_service_table_sans_2020$`_data`[c(1:14, 15, 18, 16, 17, 19:22), ]
 
 
-tab_sans_2020 <- preventive_practice_table_sans_2020$`_data`
+tab_sans_2020 <- preventive_service_table_sans_2020$`_data`
 
 ```
 
@@ -414,14 +426,14 @@ cleaned_prop_aapc_sans_2020 <- jp_proportion_aapc_sans_2020 %>%
                            TRUE ~ .x)),
          AAPC = case_when(!is.na(aapc) ~ glue::glue('{aapc} ({aapc_c_i_low}, {aapc_c_i_high})'),
                           TRUE ~ NA_character_)) %>%
-  select(stratifier, strata, practice, AAPC)
+  select(stratifier, strata, service, AAPC)
 
 # Format APC table for future joining
 cleaned_prop_apc_sans_2020 <- jp_proportion_apc_sans_2020 %>% 
   # No model has more than a single joinpoint, so make wider and then
   # remove the excess columns to determine if there's no join point (segmend_end = 2020)
   # or a joinpoint (segment_end != 2019)
-  pivot_wider(id_cols = c(stratifier, strata, practice, model),
+  pivot_wider(id_cols = c(stratifier, strata, service, model),
               names_from = segment,
               values_from = c(segment_start, segment_end, apc, p_value, apc_significant,
                               apc_95_lcl, apc_95_ucl)
@@ -493,12 +505,12 @@ cleaned_prop_apc_sans_2020 <- jp_proportion_apc_sans_2020 %>%
                              )
          ) %>% 
   # MAke apc empty if not significant
-  select(stratifier, strata, practice, segment, starts_with('APC '), -segment_start_0, -segment_start_1, -segment_end_1)
+  select(stratifier, strata, service, segment, starts_with('APC '), -segment_start_0, -segment_start_1, -segment_end_1)
 
-# Clean up the age adjusted preventive practices and then join with the aapc table
+# Clean up the age adjusted preventive services and then join with the aapc table
 clean_age_adjusted_prop <- age_adjusted_stats %>% 
-  # Filter to just the >=3 practices
-  #filter(label == 'At least three preventive practices followed') %>% 
+  # Filter to just the >=3 services
+  #filter(label == 'At least three preventive services followed') %>% 
   # Filter down to every other year
   filter(year %in% seq(2000, 2020, by = 1)) %>% 
   mutate(chr_age_adj_prop = specifyDecimal(p, digits = 1),
@@ -510,8 +522,19 @@ clean_age_adjusted_prop <- age_adjusted_stats %>%
     names_from = year,
     values_from = c(p, percentage, p.std.error),
   ) %>% 
+  # Calculate average proportion for all years and SE
+  rowwise() %>% 
+  mutate(p_average = mean(c_across(p_2008:p_2019)),
+         p_se = sd(c_across(p_2008:p_2019)) / sqrt(13),
+         p_lci = p_average - 1.96 * p_se,
+         p_uci = p_average + 1.96 * p_se) %>% 
+  ungroup() %>% 
+  # Now combine
+  mutate(p_average_chr = specifyDecimal(p_average, digits = 1),
+         p_se_chr = specifyDecimal(p_se, digits = 1),
+         `Average` = glue::glue('{p_average_chr} ({p_se_chr})')) %>% 
   # Remove excess strata
-  filter(strata %!in% c('Not available', 'Other Race/Not Hispanic')) %>% 
+  filter(strata %!in% c('Not available', 'Other Race/not Hispanic')) %>% 
   # Relevel stratifier factor, clean up stratifier and strata names
   mutate(stratifier = factor(stratifier,
                              c('overall', 'age', 'sex', 'race', 'edu', 'insurance', 'poverty')),
@@ -540,19 +563,19 @@ clean_age_adjusted_prop <- age_adjusted_stats %>%
     poverty = 'Poverty level'
   )) %>% 
   # Join with AAPC table
-  left_join(cleaned_prop_aapc_sans_2020, by = c('stratifier', 'strata', 'variable' = 'practice'))
+  left_join(cleaned_prop_aapc_sans_2020, by = c('stratifier', 'strata', 'variable' = 'service'))
 
 
 
-cleaned_proportion_df_sans_2020 <- left_join(clean_age_adjusted_prop, cleaned_prop_apc_sans_2020, by = c('stratifier', 'strata', 'variable' = 'practice')) %>% 
+cleaned_proportion_df_sans_2020 <- left_join(clean_age_adjusted_prop, cleaned_prop_apc_sans_2020, by = c('stratifier', 'strata', 'variable' = 'service')) %>% 
   mutate(AAPC = case_when(is.na(AAPC) & is.na(`APC Period 2`) & is.na(`APC Period 3`) ~ `APC Period 1`,
                           TRUE ~ AAPC),
          `APC Period 1` = case_when(is.na(`APC Period 1`) & is.na(`APC Period 2`) ~ AAPC,
                                     TRUE ~ `APC Period 1`)) %>%
   # Rename poverty levels
   mutate(strata = case_when(as.character(strata) == 'Poor/Negative' ~ '< 100%',
-                            as.character(strata) == 'Low income' ~ '100% - 199%',
-                            as.character(strata) == 'Middle income' ~ '200% - 399%',
+                            as.character(strata) == 'Low income' ~ '100%—199%',
+                            as.character(strata) == 'Middle income' ~ '200%—399%',
                             as.character(strata) == 'High income' ~ '> 400%',
                             TRUE ~ as.character(strata))) 
 
@@ -571,7 +594,8 @@ prop_tab_sans_2020 <- cleaned_proportion_df_sans_2020 %>%
   select(
     stratifier,
     ` ` = strata,
-    `Preventive Practice` = variable,
+    `Preventive service` = variable,
+    `Average (SE)` = Average,
     `2008`:`2020`,
     `Percent Change (95% CI)`,
     `Joinpoint Year` = segment,
@@ -595,10 +619,10 @@ prop_tab_sans_2020 <- cleaned_proportion_df_sans_2020 %>%
                            'Age: 75+',
                            'Sex: Female',
                            'Sex: Male',
-                           'Race/Ethnicity: Asian/Not Hispanic',
-                           'Race/Ethnicity: Black/Not Hispanic',
+                           'Race/Ethnicity: Asian/not Hispanic',
+                           'Race/Ethnicity: Black/not Hispanic',
                            'Race/Ethnicity: Hispanic',
-                           'Race/Ethnicity: White/Not Hispanic',
+                           'Race/Ethnicity: White/not Hispanic',
                            'Highest degree earned: Greater than high school',
                            'Highest degree earned: High school',
                            'Highest degree earned: Less than high school',
@@ -607,8 +631,8 @@ prop_tab_sans_2020 <- cleaned_proportion_df_sans_2020 %>%
                            'Insurance coverage: Private only',
                            'Insurance coverage: Uninsured',
                            'Poverty income ratio: > 400%',
-                           'Poverty income ratio: 200% - 399%',
-                           'Poverty income ratio: 100% - 199%',
+                           'Poverty income ratio: 200%—399%',
+                           'Poverty income ratio: 100%—199%',
                            'Poverty income ratio: < 100%')) %>% 
   # Clean up APC values
   mutate(`APC (95% CI)` = paste(`APC Period 1`, `APC Period 2`, `APC Period 3`, `APC Period 4`, sep = ", ") %>%
@@ -639,7 +663,8 @@ proportion_table_sans_2020 <- prop_tab_sans_2020 %>%
   ungroup() %>% 
   filter(stratifier == 'Overall') %>% 
   select(
-    `Preventive Practice`,
+    `Preventive service`,
+    `Average (SE)`,
     `2008 (SE)`,
     `2009 (SE)`,
     `2010 (SE)`,
@@ -664,12 +689,14 @@ proportion_table_sans_2020 <- prop_tab_sans_2020 %>%
   tab_footnote(
     footnote = "Values in these columns were estimated excluding data from 2020.",
     locations = cells_column_labels(
-      columns = c(`Percent Change (95% CI)`,
+      columns = c(
+      `Average (SE)`,
+      `Percent Change (95% CI)`,
       `APC (95% CI)`,
       `AAPC (95% CI)`
     ))
   ) %>% 
-  tab_options(footnotes.marks = "a",
+  tab_options(footnotes.marks = "*",
               table.font.names = 'Times New Roman',
               table.font.size = 12)
 # Reorganize insurance variables
@@ -685,14 +712,15 @@ proportion_table_sans_2020 <- prop_tab_sans_2020 %>%
 
 # prop_tab_sans_2020 <- proportion_table_sans_2020$`_data`
 proportion_table_sans_2020 %>%
-  gtsave('proportion_2020.docx')
+  gtsave('table1.docx')
 
 
 
 supplement_prop_tab <- prop_tab_sans_2020 %>% 
   select(
     ` `,
-    `Preventive Practice`,
+    `Preventive service`,
+    `Average (SE)`,
     `2008 (SE)`,
     `2009 (SE)`,
     `2010 (SE)`,
@@ -717,17 +745,28 @@ supplement_prop_tab <- prop_tab_sans_2020 %>%
   tab_footnote(
     footnote = "Values in these columns were estimated excluding data from 2020.",
     locations = cells_column_labels(
-      columns = c(`Percent Change (95% CI)`,
+      columns = c(
+      `Average (SE)`,
+      `Percent Change (95% CI)`,
       `APC (95% CI)`,
       `AAPC (95% CI)`
     ))
   ) %>% 
-  tab_options(footnotes.marks = "a",
+  tab_options(footnotes.marks = "*",
               table.font.names = 'Times New Roman',
               table.font.size = 12)
+# 
+# prop_tab_sans_2020 <- rename(prop_tab_sans_2020, stratifier_column = ` `) %>% 
+#   janitor::clean_names()
 
-prop_tab_sans_2020 <- rename(prop_tab_sans_2020, stratifier_column = ` `) %>% 
-  janitor::clean_names()
+in_text_prop_tab_sans_2020 <- rename(prop_tab_sans_2020,
+                                     preventive_service = `Preventive service`,
+                                     stratifier_column = ` `,
+                                     apc_period_1_95_percent_ci = `APC Period 1 (95% CI)`,
+                                     apc_period_2_95_percent_ci = `APC Period 2 (95% CI)`,
+                                     apc_period_3_95_percent_ci = `APC Period 3 (95% CI)`,
+                                     apc_period_4_95_percent_ci = `APC Period 4 (95% CI)`,
+                                     aapc_95_percent_ci = `AAPC (95% CI)`)
 ```
 
 ```{r plots-sans-2020}
@@ -737,7 +776,7 @@ stats_table_plot_dat <- jp_proportion_plot_data %>%
   mutate(model = as.numeric(model)) %>% 
   filter(strata != 'Total') %>%
   filter(strata != 'Not available') %>% 
-  filter(strata != 'Other Race/Not Hispanic') %>% 
+  filter(strata != 'Other Race/not Hispanic') %>% 
   filter(strata != 'Other') %>% 
   mutate(variable_text = case_when(variable == 'a1c' ~ 'Two or more A1C tests',
                                    variable == 'CHOL_all' ~ 'Cholesterol tested',
@@ -767,8 +806,8 @@ stats_table_plot_dat$poverty$strata <-
     levels = c('High income', 'Middle income', 'Low income', 'Poor/Negative'),
     labels = c(
       '> 400% ',
-      '200% - 399%',
-      '100% - 199%',
+      '200%—399%',
+      '100%—199%',
       '< 100%'
       
     )
@@ -778,7 +817,7 @@ stats_table_plot_dat_sans_2020 <- jp_proportion_plot_data_sans_2020 %>%
   mutate(model = as.numeric(model)) %>% 
   filter(strata != 'Total') %>%
   filter(strata != 'Not available') %>% 
-  filter(strata != 'Other Race/Not Hispanic') %>% 
+  filter(strata != 'Other Race/not Hispanic') %>% 
   filter(strata != 'Other') %>% 
   mutate(variable_text = case_when(variable == 'a1c' ~ 'Two or more A1C tests',
                                    variable == 'CHOL_all' ~ 'Cholesterol tested',
@@ -812,8 +851,8 @@ stats_table_plot_dat_sans_2020$poverty$strata <-
     levels = c('Poor/Negative', 'Low income', 'Middle income', 'High income'), 
     labels = c(
       'd< 100%',
-      'c100% - 199%',
-      'b200% - 399%',
+      'c100%—199%',
+      'b200%—399%',
       'a> 400% '
     ),
     ordered = TRUE
@@ -832,13 +871,13 @@ stats_table_2020_only$poverty$strata <-
   factor(
     stats_table_2020_only$poverty$strata,
     levels = c('< 100%',
-               '100% - 199%',
-               '200% - 399%',
+               '100%—199%',
+               '200%—399%',
                '> 400% '), 
     labels = c(
       'd< 100%',
-      'c100% - 199%',
-      'b200% - 399%',
+      'c100%—199%',
+      'b200%—399%',
       'a> 400% '
     ),
     ordered = TRUE
@@ -1050,15 +1089,15 @@ test_plots_sans_2020[[4]] <-
   scale_color_manual(
     name = 'Poverty income ratio',
     labels = c('a> 400% '     = '> 400%ᵇᶜ',
-               'b200% - 399%' = '200% - 399%ᵇ',
-               'c100% - 199%' = '100% - 199%ᵃ',
+               'b200%—399%' = '200%—399%ᵇ',
+               'c100%—199%' = '100%—199%ᵃ',
                'd< 100%'      = '< 100%',
                'z'           = 'Overallᵇ'),
     
     values = c(
       'a> 400% ' = color_pal[1],
-      'b200% - 399%' = color_pal[2],
-      'c100% - 199%' = color_pal[3],
+      'b200%—399%' = color_pal[2],
+      'c100%—199%' = color_pal[3],
       'd< 100%' = color_pal[4],
       'z' = '#000000'
     )
@@ -1066,14 +1105,14 @@ test_plots_sans_2020[[4]] <-
   scale_linetype_manual(
     name = 'Poverty income ratio',
     labels = c('a> 400% '     = '> 400%ᵇᶜ',
-               'b200% - 399%' = '200% - 399%ᵇ',
-               'c100% - 199%' = '100% - 199%ᵃ',
+               'b200%—399%' = '200%—399%ᵇ',
+               'c100%—199%' = '100%—199%ᵃ',
                'd< 100%'      = '< 100%',
                'z'           = 'Overallᵇ'),
     values = c(
       'a> 400% ' = 'solid',
-      'b200% - 399%' = 'solid',
-      'c100% - 199%' = 'solid',
+      'b200%—399%' = 'solid',
+      'c100%—199%' = 'solid',
       'd< 100%' = 'solid',
       'z' = 'dashed'
     )
@@ -1089,34 +1128,34 @@ test_plots_sans_2020[[5]] <-
   scale_color_manual(
     name = 'Race & Ethnicity',
     labels = c(
-     'Asian/Not Hispanic' = 'Asian/Not Hispanicᵇ',
-     'Black/Not Hispanic' = 'Black/Not Hispanic',
+     'Asian/not Hispanic' = 'Asian/not Hispanicᵇ',
+     'Black/not Hispanic' = 'Black/not Hispanic',
      'Hispanic'           = 'Hispanicᶜ',
-     'White/Not Hispanic' = 'White/Not Hispanicᵇᶜ',
+     'White/not Hispanic' = 'White/not Hispanicᵇᶜ',
      'z'                  = 'Overallᵇ'
     ),
     values = c(
-     'Asian/Not Hispanic' = color_pal[1],
-     'Black/Not Hispanic'  = color_pal[2],
+     'Asian/not Hispanic' = color_pal[1],
+     'Black/not Hispanic'  = color_pal[2],
      'Hispanic' = color_pal[3],
-     'White/Not Hispanic' = color_pal[4],
+     'White/not Hispanic' = color_pal[4],
      'z' = '#000000'
     )
   ) +
   scale_linetype_manual(
     name = 'Race & Ethnicity',
     labels = c(
-     'Asian/Not Hispanic' = 'Asian/Not Hispanicᵇ',
-     'Black/Not Hispanic' = 'Black/Not Hispanic',
+     'Asian/not Hispanic' = 'Asian/not Hispanicᵇ',
+     'Black/not Hispanic' = 'Black/not Hispanic',
      'Hispanic'           = 'Hispanicᶜ',
-     'White/Not Hispanic' = 'White/Not Hispanicᵇᶜ',
+     'White/not Hispanic' = 'White/not Hispanicᵇᶜ',
      'z'                  = 'Overallᵇ'
     ),
     values = c(
-     'Asian/Not Hispanic' = 'solid',
-     'Black/Not Hispanic'  = 'solid',
+     'Asian/not Hispanic' = 'solid',
+     'Black/not Hispanic'  = 'solid',
      'Hispanic' = 'solid',
-     'White/Not Hispanic' = 'solid',
+     'White/not Hispanic' = 'solid',
      'z' = 'dashed'
     )
   )
@@ -1350,14 +1389,14 @@ exam_plots_sans_2020[[4]] <-
   scale_color_manual(
     name = 'Poverty income ratio',
     labels = c('a> 400% '     = '> 400%ᵃ',
-               'b200% - 399%' = '200% - 399%',
-               'c100% - 199%' = '100% - 199%',
+               'b200%—399%' = '200%—399%',
+               'c100%—199%' = '100%—199%',
                'd< 100%'      = '< 100%ᶜ',
                'z'           = 'Overallᵇ'),
     values = c(
       'a> 400% '     = color_pal[1],
-      'b200% - 399%' = color_pal[2],
-      'c100% - 199%' = color_pal[3],
+      'b200%—399%' = color_pal[2],
+      'c100%—199%' = color_pal[3],
       'd< 100%'      = color_pal[4],
       'z'           = '#000000'
     )
@@ -1365,14 +1404,14 @@ exam_plots_sans_2020[[4]] <-
   scale_linetype_manual(
     name = 'Poverty income ratio',
     labels = c('a> 400% '     = '> 400%ᵃ',
-               'b200% - 399%' = '200% - 399%',
-               'c100% - 199%' = '100% - 199%',
+               'b200%—399%' = '200%—399%',
+               'c100%—199%' = '100%—199%',
                'd< 100%'      = '< 100%ᶜ',
                'z'           = 'Overallᵇ'),
     values = c(
       'a> 400% ' = 'solid',
-      'b200% - 399%' = 'solid',
-      'c100% - 199%' = 'solid',
+      'b200%—399%' = 'solid',
+      'c100%—199%' = 'solid',
       'd< 100%' = 'solid',
       'z' = 'dashed'
     )
@@ -1390,34 +1429,34 @@ exam_plots_sans_2020[[5]] <-
   scale_color_manual(
     name = 'Race & Ethnicity',
     labels = c(
-      'Asian/Not Hispanic' = 'Asian/Not Hispanic',
-      'Black/Not Hispanic' = 'Black/Not Hispanic',
+      'Asian/not Hispanic' = 'Asian/not Hispanic',
+      'Black/not Hispanic' = 'Black/not Hispanic',
       'Hispanic'           = 'Hispanic',
-      'White/Not Hispanic' = 'White/Not Hispanicᶜ',
+      'White/not Hispanic' = 'White/not Hispanicᶜ',
       'z'                  = 'Overallᵇ'
     ),
     values = c(
-      'Asian/Not Hispanic' = color_pal[1],
-      'Black/Not Hispanic' = color_pal[2],
+      'Asian/not Hispanic' = color_pal[1],
+      'Black/not Hispanic' = color_pal[2],
       'Hispanic'           = color_pal[3],
-      'White/Not Hispanic' = color_pal[4],
+      'White/not Hispanic' = color_pal[4],
       'z'                  = '#000000'
     )
   ) +
   scale_linetype_manual(
     name = 'Race & Ethnicity',
         labels = c(
-       'Asian/Not Hispanic' = 'Asian/Not Hispanic',
-       'Black/Not Hispanic' = 'Black/Not Hispanic',
+       'Asian/not Hispanic' = 'Asian/not Hispanic',
+       'Black/not Hispanic' = 'Black/not Hispanic',
        'Hispanic'           = 'Hispanic',
-       'White/Not Hispanic' = 'White/Not Hispanicᶜ',
+       'White/not Hispanic' = 'White/not Hispanicᶜ',
        'z'                  = 'Overallᵇ'
     ),
     values = c(
-      'Asian/Not Hispanic' = 'solid',
-      'Black/Not Hispanic'  = 'solid',
+      'Asian/not Hispanic' = 'solid',
+      'Black/not Hispanic'  = 'solid',
       'Hispanic' = 'solid',
-      'White/Not Hispanic' = 'solid',
+      'White/not Hispanic' = 'solid',
       'z' = 'dashed'
     )
   )
@@ -1480,17 +1519,20 @@ all_test_plots_sans_2020 <- test_plots_sans_2020 %>%
 ```{r}
 #| include: false
 # Save figure/table output
-preventive_practice_table %>%
-  gtsave('preventive_practices.docx')
-preventive_practice_table_sans_2020 %>%
-  gtsave('preventive_practices_2020.docx')
+supplement_prop_tab %>% 
+  tab_header('Age-adjusted trends in proportions of U.S. adults overall and by subgroup with diabetes that report receiving six recommended care services - at least one dental visit, one dilated eye exam, one foot exam, two or more A1C tests, cholesterol level tested, and receiving an influenza vaccine.') %>% 
+  gtsave('supplemental_table1.docx')
+preventive_service_table %>%
+  gtsave('preventive_services.docx')
+preventive_service_table_sans_2020 %>%
+  gtsave('preventive_services_2020.docx')
 ggsave(plot = all_exam_plots_sans_2020,
-       filename = 'figures/all_exam_plots.tiff',
+       filename = 'figures/figure1.tiff',
        dpi = 1200,
        width = 10,
        height = 6)
 ggsave(plot = all_test_plots_sans_2020,
-       filename = 'figures/all_test_plots.tiff',
+       filename = 'figures/figure2.tiff',
        dpi = 1200,
        width = 10,
        height = 6)
@@ -1506,115 +1548,136 @@ ggsave(plot = all_test_plots_sans_2020,
 #        height = 6)
 ```
 
-*Target Journal: American Journal of Preventive Medicine*
+*Target Journal: Diabetes Care*
 
-**Trends in Preventive Care Services among US Adults with Diagnosed Diabetes, 2008-2020**
+**Trends in Preventive Care Services among U.S. Adults with Diagnosed Diabetes, 2008--2020**
 
-Jacob T. Wittman, PhD, Kai McKeever Bullard, MPH, PhD, Stephen R. Benoit, MD, MPH
+Running Title: Trends in preventive care services for diabetes
 
-CDC Affiliation
+Jacob T. Wittman, PhD, Kai McKeever Bullard, PhD, Stephen R. Benoit, MD
 
-Corresponding Author:
+Division of Diabetes Translation, Centers for Disease Control and Prevention, Atlanta, GA, United States
+
+Corresponding Author: Jacob T. Wittman, ugv4\@cdc.gov
+
+Disclaimer: The findings and conclusions in this report are those of the authors and do not necessarily represent the official position of the Centers for Disease Control and Prevention.
+
+Twitter Summary: We report trends of six ADA recommended preventive care services 2008 –- 2020. Other than flu vaccination, we saw no improvement in receipt of preventive care services for US adults with diabetes. 
 
 Word Count:
 
-Conflict of Interest Statement:
-
-Financial Disclosure:
+Number of tables and figures: 3
 
 \pagebreak
 
-# Abstract
+# Abstract (250 words, current 250)
 
-**Introduction:** Preventive care services are important for managing complications associated with diabetes. We reported trends in receipt of six American Diabetes Association recommended preventive care services during 2008 -- 2020.
+**Objective:** Preventive care services are important to prevent or delay complications associated with diabetes. We reported trends in receipt of six American Diabetes Association recommended preventive care services during 2008 -- 2020.
 
-**Methods:** We used 2008 -- 2020 data from the Medical Expenditures Panel Survey to calculate the proportion of US adults ≥ 18 years of age with diagnosed diabetes that reported receiving preventive care services, overall and for subpopulations. We used Joinpoint regression to identify trends during 2008 -- 2019. The six services in the past year included at least one dental examination, a dilated eye examination, foot examination, ≥ 2 A1C tests, a cholesterol test, and the receipt of an influenza vaccine.
+**Research Design and Methods:** We used 2008--2020 data from the cross-sectional Medical Expenditures Panel Survey to calculate the proportion of U.S. adults ≥ 18 years of age with diagnosed diabetes that reported receiving preventive care services, overall and for subpopulations. We used Joinpoint regression to identify trends during 2008 -- 2019. The six services in the past year included at least one dental examination, a dilated eye examination, foot examination, ≥ 2 A1C tests, a cholesterol test, and receipt of an influenza vaccine.
 
-**Results:** From 2008 to 2019, overall trends in preventive services among US adults with diabetes were stable with the exception of an increase in the receipt of influenza vaccines (average annual percent change: `r pullNumber2(prop_tab_sans_2020, 'aapc_95_percent_ci', brackets = TRUE, stratifier_column == 'Overall', preventive_practice == 'Received influenza vaccine')`). Trend analysis at the subgroup level was heterogenous but influenza vaccination, A1C testing, and dental visits tended to improve while foot exams, cholesterol testing, and dental visits among the uninsured tended to decline. In 2020, 8.2% (95% CI: 4.5%, 11.9%) received none of the six recommended preventive care services.
+**Results:** From 2008--2020, proportions of U.S. adults with diabetes receiving any individual preventive care service ranged from 32.6% to 89.9%. From 2008--2019, overall trends in preventive services among these adults were stable except for an increase in receipt of influenza vaccines (average annual percent change: `r pullNumber2(in_text_prop_tab_sans_2020, 'aapc_95_percent_ci', brackets = TRUE, CI = FALSE, stratifier_column == 'Overall', preventive_service == 'Received influenza vaccine')`). Trend analysis at the subgroup level was heterogeneous: influenza vaccination, A1C testing, and dental visits tended to improve while, among the uninsured, foot exams, cholesterol testing, and dental visits tended to decline. In 2020, 8.2% (4.5%, 11.9%) received none of the six recommended preventive care services.
 
-**Conclusions:** Other than influenza vaccination, we observed no improvement in receipt of preventive care services among US adults with diabetes. These data highlight services and specific subgroups that could be targeted to improve preventive care among adults with diabetes.
+**Conclusions:** Other than influenza vaccination, we observed no improvement in receipt of preventive care services among U.S. adults with diabetes. These data highlight services and specific subgroups that could be targeted to improve preventive care among adults with diabetes.
+
+# Article Highlights (75 - 100 words, current: 99)
+
+-  We reported trends in receipt of six American Diabetes Association recommended preventive care services during 2008--2020.
+- The preventive services we evaluated were dental examinations, a dilated eye examination, a foot examination by a healthcare provider, ≥2 A1C tests, a blood cholesterol test, and an influenza vaccine.
+- From 2008 to 2019, overall trends in preventive services among U.S. adults with diabetes were stable except for an increase in the receipt of influenza vaccines.
+- These data highlight services and specific subgroups that could be targeted to improve preventive care among adults with diabetes.
 
 \pagebreak
 
 # Introduction
 
-Diabetes is a chronic disease that affects 11.3% of the adult population, or 37.1 million adults, in the United States @nationalreport. Diabetes is also costly: total direct and indirect costs are estimated at \$327 billion @economic2018. The prevalence of diabetes in the US is expected to increase to 60.6 million adults by the year 2060 @lin2018. Incidence of diabetes peaked in the US at 8.5 cases per 1,000 in 2008 and 2009 and has fallen since to 5.1 cases per 1,000 in 2021 [@dashboard; @magliano2019]. Despite this decrease in the number of newly diagnosed cases of diabetes, rates of hospitalization with diabetes as the primary diagnosis have been increasing since the year 2000 by about 2.5% per year @zhang2022.
+Diabetes is a chronic disease that affects 11.3% of the adult population, or 37.1 million adults, in the United States @nationalreport. Diabetes is also costly: total direct and indirect costs are estimated at \$327 billion @economic2018. The prevalence of diabetes in the U.S. is expected to increase to 60.6 million adults by the year 2060 @lin2018. Incidence of diabetes peaked in the U.S. at 8.5 cases per 1,000 in 2008 and 2009 and has fallen since to 5.1 cases per 1,000 in 2021 [@dashboard; @magliano2019]. While rates of newly diagnosed cases of diabetes have decreased, rates of hospitalization with diabetes as the primary diagnosis have been increasing since the year 2000 by about 2.5% per year @zhang2022.
 
-Access to preventive services is important to minimize complications due to diabetes and reduce rates of hospitalization. Other studies have reported on trends in receipt of some preventive services in the 2000s using data from various surveys, such as the Behavioral Risk Factor Surveillance System (BRFSS) and the National Health and Nutrition Examination Survey (NHANES) [@monnette2020; @luo2019; @shin2021; @fang2020; @eppley2019]. To our knowledge, the proportion and trend of receipt of preventive services from the Medical Expenditure Panel Survey (MEPS) has not been reported. We reported the proportion of and trends in the receipt of six preventive care services recommended by the ADA overall and among subgroups. These data are valuable for identifying groups that may be underutilizing health care services, examining any effects the COVID-19 pandemic may have had on the receipt of these services, and providing benchmarks for future studies.
+Access to preventive services is important to minimize diabetes-related complications and reduce rates of hospitalization. Other studies have reported on trends in receipt of some preventive services in the 2000s using data from various surveys, such as the Behavioral Risk Factor Surveillance System (BRFSS) and the National Health and Nutrition Examination Survey (NHANES) [@monnette2020; @luo2019; @shin2021; @fang2020; @eppley2019]. To our knowledge, the proportion and trend of receipt of preventive services addressed in the Medical Expenditure Panel Survey (MEPS) has not been reported. We reported the proportion of and trends in the receipt of six preventive care services recommended by the American Diabetes Association (ADA) overall and among subgroups. These data are valuable for identifying groups that may be under-utilizing health care services, examining any effects the COVID-19 pandemic may have had on receipt of these services, and providing benchmarks for future studies.
 
-# Methods
+# Research Design and Methods
 
 ## Data Source
 
-We used data from MEPS from the years 2008 -- 2020 MEPS, a household survey of U.S. noninstitutionalized populations administered and maintained by the Agency for Healthcare Research and Quality since 1996. We chose 2008 to 2020 due to method changes in MEPS and the consistency of questions related to preventive care services during that time period. Data used from MEPS were collected through a combination of computer assisted personal interviewing and pencil-and-paper surveys. MEPS provides national and regional estimates of health care use, expenditures, sources of payment and health insurance coverage. This survey also contains information on patient demographics, socioeconomic, and, via the Diabetes Care Survey (DCS), information on diabetes preventive care services. The DCS is a self-administered paper-and-pencil questionnaire that is provided to MEPS respondents who indicate that they have been told by a doctor or health professional that they have diabetes. In this analysis, we used data from the full-year consolidated MEPS file with an average annual number of 32,170 individual respondents over the 13-year period and response rates ranging from 59.3% in 2008 to 27.6% in 2020.
+We used data from the 2008 -- 2020 MEPS, a household survey of U.S. noninstitutionalized populations administered and maintained by the Agency for Healthcare Research and Quality since 1996. The set of households surveyed for MEPS is a subsample of those surveyed in the National Health Interview Survey (NHIS). We chose the years 2008 to 2020 due to method changes in MEPS starting in 2008, and the consistency of questions related to preventive care during that time period. Data from MEPS were collected through a combination of computer-assisted personal interviewing and pencil-and-paper surveys. MEPS provides national and regional estimates of health care use, expenditures, sources of payment and health insurance coverage. This survey also contains information on patient demographics, socioeconomic characteristics, and, via the Diabetes Care Survey (DCS), information on diabetes preventive care services. The DCS is a self-administered paper-and-pencil questionnaire that is provided to MEPS respondents who indicate that they have been told by a doctor or health care professional that they have diabetes. In this analysis, we used data from the full-year consolidated MEPS files with an average annual number of 32,170 individual respondents over the 13-year period and response rates from 59.3% in 2008 to 27.6% in 2020.
 
-## Outcome measures
+## Outcome Measures
 
-Among those respondents with self-reported diagnosed diabetes, we selected six preventive care variables that were available in the data from 2008--2020. These variables are based on self-reported receipt in a given year @ada2021: ≥1 dental examination (derived from total number of reported dental care visits), a dilated eye examination, a foot examination by a healthcare provider, ≥2 A1C tests, a blood cholesterol test, and an influenza vaccine. Respondents were asked about receiving each of these services in a given year (e.g. "Did you receive an influenza vaccine in 2013?"). We also created a binary variable classifying adults with diabetes having received none of the recommended preventive care services, although these results are only presented for the overall population due to small sample sizes in many of the examined subgroups.
+Among respondents with self-reported diagnosed diabetes, we selected six preventive care variables that were available in the data from 2008 to 2020. These variables are based on self-reported receipt in a given year @ada2021: ≥1 dental examination (derived from total number of reported dental care visits), a dilated eye examination, a foot examination by a healthcare provider, ≥2 A1C tests, a blood cholesterol test, and an influenza vaccine. Respondents were asked about receiving each of these services in a given year (e.g., "Did you receive an influenza vaccine in 2013?"). We also created a binary variable classifying adults with diabetes who received none of the recommended preventive care services, although these results are presented only for the overall population due to small sample sizes in many of the examined subgroups.
 
 ## Analysis
 
-Our analysis accounts for the complex survey design used, including clustering and stratification. Reported values were age-adjusted using the direct method, standardized to the 2000 US population grouped by ages 18 -- 44, 45 -- 64, 65 -- 74, and ≥75. We presented these estimates for the overall population, as well as stratified by age, sex, race and ethnicity, highest degree of education obtained, type of insurance, and the ratio of family income to the poverty line (poverty income ratio). We used the package gtsummary in R Statistical Software (v4.2.1) to calculate estimates [@gtsummary; @rcore2022].
+Our analysis accounts for the complex survey design used, including clustering and stratification. Reported values were age-adjusted using the direct method, standardized to the 2000 U.S. population grouped by ages 18 -- 44, 45 -- 64, 65 -- 74, and ≥75 years. We presented these estimates for the overall population, as well as stratified by self-reported characteristics of age, sex, race and ethnicity, highest degree of education, type of health insurance, and the ratio of family income to the poverty line (poverty income ratio). We used the package gtsummary in R Statistical Software (v4.2.1) to calculate estimates [@gtsummary; @rcore2022].
 
-Medical care utilization decreased as a result of the COVID-19 pandemic starting in early 2020 @cantor2022. We reported the estimated proportions for 2020 in Table 1 and as points in @fig-exams and @fig-tests, but 2020 was excluded from trend analysis. Trends were analyzed using Joinpoint Command Line Software @joinpoint with R via the R package nih.joinpoint @nihjoinpoint. Joinpoint regression uses permutation tests to detect statistically significant changes at a pre-specified alpha of 0.05 in direction or magnitude of trends @kim2000permutation. The Joinpoint software also provided estimates of the annual percent change (APC) for each trend segment and the average annual percent change (AAPC) for the entire trend.
+Medical care utilization decreased as a result of the COVID-19 pandemic starting in early 2020 @cantor2022. We reported the estimated proportions for 2020 in Table 1 and as points in @fig-exams and @fig-tests, but 2020 was excluded from trend analysis because of the decreased medical care utilization associated with the COVID-19 pandemic. Trends were analyzed using Joinpoint Command Line Software @joinpoint with R via the R package nih.joinpoint @nihjoinpoint. The Joinpoint software was used to fit a weighted least-squares regression model to the estimated proportions on the linear scale. A maximum of three joinpoints were searched for using the Grid search algorithm. As few as two observed time points were allowed between line segment. Joinpoint regression uses permutation tests to detect statistically significant changes at a pre-specified alpha of 0.05 in direction or magnitude of trends @kim2000permutation. The Joinpoint software also provided estimates of the annual percent change (APC) for each trend segment and the average annual percent change (AAPC) for the entire trend.
+
+## Data and Resource Availability
+
+The datasets generated during and/or analyzed in the current study are available from the corresponding author upon reasonable request.
 
 # Results
 
-All values presented below, as well as those that are not described, can be found in Supplemental Table 1.
+All values pertaining to individual preventive practices presented here, as well as those that are not described, can be found in Supplemental Table 1.
 
-## Cholesterol testing
+## Cholesterol Testing
 
-During 2008--2019, we found no significant change in the percentage of adults with diabetes who received cholesterol tests (Table 1). For adults age 45--64 years, cholesterol testing was flat from 2008 to 2015 and showed a significant decrease starting in 2016 (APC: `r pullNumber2(prop_tab_sans_2020, 'apc_period_2_95_percent_ci', brackets = TRUE, stratifier_column == 'Age: 45 to 64', preventive_practice == 'Cholesterol tested')`, AAPC: `r pullNumber2(prop_tab_sans_2020, 'aapc_95_percent_ci', brackets = TRUE, stratifier_column == 'Age: 45 to 64', preventive_practice == 'Cholesterol tested')`). We found significant decreases starting in 2016 in the percentage of males receiving cholesterol testing (APC: `r pullNumber2(prop_tab_sans_2020, 'apc_period_2_95_percent_ci', brackets = TRUE, stratifier_column == 'Sex: Male', preventive_practice == 'Cholesterol tested')`) and adults with less than a high school education (APC: `r pullNumber2(prop_tab_sans_2020, 'apc_period_2_95_percent_ci', brackets = TRUE, stratifier_column == 'Highest degree earned: Less than high school', preventive_practice == 'Cholesterol tested')`, AAPC: `r pullNumber2(prop_tab_sans_2020, 'aapc_95_percent_ci', brackets = TRUE, stratifier_column == 'Highest degree earned: Less than high school', preventive_practice == 'Cholesterol tested')`). Adults with Medicaid had an AAPC: of `r pullNumber2(prop_tab_sans_2020, 'aapc_95_percent_ci', brackets = TRUE, stratifier_column == 'Insurance coverage: Medicaid', preventive_practice == 'Cholesterol tested')`.
+During 2008--2019, we found no significant change in the percentage of adults with diabetes who received cholesterol tests, which averaged 84.4% (95% CI: 81.8%, 87.0%) during this period (Table 1). For adults age 45--64 years, cholesterol testing was flat from 2008 to 2015 and showed a significant decrease starting in 2016 (APC `r pullNumber2(in_text_prop_tab_sans_2020, 'apc_period_2_95_percent_ci', brackets = TRUE, CI = FALSE, stratifier_column == 'Age: 45 to 64', preventive_service == 'Cholesterol tested')`, AAPC `r pullNumber2(in_text_prop_tab_sans_2020, 'aapc_95_percent_ci', brackets = TRUE, CI = FALSE, stratifier_column == 'Age: 45 to 64', preventive_service == 'Cholesterol tested')`). We found significant decreases starting in 2016 in the percentage of males (APC `r pullNumber2(in_text_prop_tab_sans_2020, 'apc_period_2_95_percent_ci', brackets = TRUE, CI = FALSE, stratifier_column == 'Sex: Male', preventive_service == 'Cholesterol tested')`) and adults with less than a high school education (APC `r pullNumber2(in_text_prop_tab_sans_2020, 'apc_period_2_95_percent_ci', brackets = TRUE, CI = FALSE, stratifier_column == 'Highest degree earned: Less than high school', preventive_service == 'Cholesterol tested')`, AAPC `r pullNumber2(in_text_prop_tab_sans_2020, 'aapc_95_percent_ci', brackets = TRUE, CI = FALSE, stratifier_column == 'Highest degree earned: Less than high school', preventive_service == 'Cholesterol tested')`) who received cholesterol testing. Adults with Medicaid had an AAPC of `r pullNumber2(in_text_prop_tab_sans_2020, 'aapc_95_percent_ci', brackets = FALSE, CI = FALSE, stratifier_column == 'Insurance coverage: Medicaid', preventive_service == 'Cholesterol tested')`.
 
-## Influenza vaccine
+## Influenza Vaccine
 
-From 2008 to 2019, receipt of influenza vaccines increased at an AAPC of `r pullNumber2(prop_tab_sans_2020, 'aapc_95_percent_ci', brackets = FALSE, stratifier_column == 'Overall', preventive_practice == 'Received influenza vaccine')`. Specifically, we noted significant increases during 2008 -- 2012 (APC: `r pullNumber2(prop_tab_sans_2020, 'apc_period_1_95_percent_ci', brackets = TRUE, stratifier_column == 'Overall', preventive_practice == 'Received influenza vaccine')`, AAPC: ), and after 2015 (APC: `r pullNumber2(prop_tab_sans_2020, 'apc_period_3_95_percent_ci', brackets = TRUE, stratifier_column == 'Overall', preventive_practice == 'Received influenza vaccine')`) (Table 1). The influenza vaccine trend for non-Hispanic White adults followed a similar pattern (`r pullNumber2(prop_tab_sans_2020, 'aapc_95_percent_ci', brackets = F, stratifier_column == 'Race/Ethnicity: White/Not Hispanic', preventive_practice == 'Received influenza vaccine')`), although only the period from 2008 to 2012 had a significant increase (APC: `r pullNumber2(prop_tab_sans_2020, 'apc_period_1_95_percent_ci', brackets = TRUE, stratifier_column == 'Race/Ethnicity: White/Not Hispanic', preventive_practice == 'Received influenza vaccine')`). Receipt of influenza vaccines increased among females over the entire study period (AAPC: `r pullNumber2(prop_tab_sans_2020, 'aapc_95_percent_ci', brackets = TRUE, stratifier_column == 'Sex: Female', preventive_practice == 'Received influenza vaccine')`). Adult males, adults in the poverty income ratio group 200%--399% and \>400%, and adults on private insurance show increase in the receipt of influenza vaccines in the early part of the study period, but flat thereafter. Receipt of influenza vaccines increased slightly for adults on Medicare (AAPC: `r pullNumber2(prop_tab_sans_2020, 'aapc_95_percent_ci', brackets = TRUE, stratifier_column == 'Insurance coverage: Medicare only', preventive_practice == 'Received influenza vaccine')`).
+From 2008 to 2019, receipt of influenza vaccines increased at an AAPC of `r pullNumber2(in_text_prop_tab_sans_2020, 'aapc_95_percent_ci', brackets = FALSE, CI = FALSE, stratifier_column == 'Overall', preventive_service == 'Received influenza vaccine')`. The average proportion of adults with diabetes receiving an influenza vaccine over the study period was 41.8% (39.6%, 44.0%). Specifically, we noted significant increases during 2008 -- 2012 (APC `r pullNumber2(in_text_prop_tab_sans_2020, 'apc_period_1_95_percent_ci', brackets = TRUE, CI = FALSE, stratifier_column == 'Overall', preventive_service == 'Received influenza vaccine')`, AAPC `r pullNumber2(in_text_prop_tab_sans_2020, 'aapc_95_percent_ci', brackets = TRUE, CI = FALSE, stratifier_column == 'Overall', preventive_service == 'Received influenza vaccine')`), and after 2015 (APC `r pullNumber2(in_text_prop_tab_sans_2020, 'apc_period_3_95_percent_ci', brackets = TRUE, CI = FALSE, stratifier_column == 'Overall', preventive_service == 'Received influenza vaccine')`) (Table 1). The influenza vaccine trend for non-Hispanic White adults followed a similar pattern (AAPC `r pullNumber2(in_text_prop_tab_sans_2020, 'aapc_95_percent_ci', brackets = TRUE, CI = FALSE, stratifier_column == 'Race/Ethnicity: White/not Hispanic', preventive_service == 'Received influenza vaccine')`), although only the period from 2008 to 2012 had a significant increase (APC `r pullNumber2(in_text_prop_tab_sans_2020, 'apc_period_1_95_percent_ci', brackets = TRUE, CI = FALSE, stratifier_column == 'Race/Ethnicity: White/not Hispanic', preventive_service == 'Received influenza vaccine')`). Receipt of influenza vaccines increased among females over the entire study period (AAPC `r pullNumber2(in_text_prop_tab_sans_2020, 'aapc_95_percent_ci', brackets = TRUE, CI = FALSE, stratifier_column == 'Sex: Female', preventive_service == 'Received influenza vaccine')`). Adult males, adults in the poverty income ratio group 200%--399% and \>400%, and adults with private insurance showed an increase in the receipt of influenza vaccines in the early part of the study period, but flat thereafter. Receipt of influenza vaccines increased slightly for adults on Medicare (AAPC `r pullNumber2(in_text_prop_tab_sans_2020, 'aapc_95_percent_ci', brackets = TRUE, CI = FALSE, stratifier_column == 'Insurance coverage: Medicare only', preventive_service == 'Received influenza vaccine')`).
 
-## A1C tests
+## One or More Dentist Visits
 
-We observed no significant changes in the overall trend in the proportion of adults receiving two or more A1C tests in a year (Table 1). Proportions increased annually by `r pullNumber2(prop_tab_sans_2020, 'aapc_95_percent_ci', brackets = FALSE, stratifier_column == 'Age: 45 to 64', preventive_practice == 'Two or more A1C tests')`, `r pullNumber2(prop_tab_sans_2020, 'aapc_95_percent_ci', brackets = FALSE, stratifier_column == 'Age: 65 to 74', preventive_practice == 'Two or more A1C tests')`, and `r pullNumber2(prop_tab_sans_2020, 'aapc_95_percent_ci', brackets = FALSE, stratifier_column == 'Age: 75+', preventive_practice == 'Two or more A1C tests')` for those age 45--64, 65--74, and ≥75 years, respectively. We also found increases in A1C testing for Hispanic adults (AAPC: `r pullNumber2(prop_tab_sans_2020, 'aapc_95_percent_ci', brackets = TRUE, stratifier_column == 'Race/Ethnicity: Hispanic', preventive_practice == 'Two or more A1C tests')` ) and for non-Hispanic White adults (AAPC: `r pullNumber2(prop_tab_sans_2020, 'aapc_95_percent_ci', brackets = TRUE, stratifier_column == 'Race/Ethnicity: White/Not Hispanic', preventive_practice == 'Two or more A1C tests')`), those with Medicare only (AAPC: `r pullNumber2(prop_tab_sans_2020, 'aapc_95_percent_ci', brackets = TRUE, stratifier_column == 'Insurance coverage: Medicare only', preventive_practice == 'Two or more A1C tests')`), and those in the highest poverty income ratio group (\> 400%) (AAPC: `r pullNumber2(prop_tab_sans_2020, 'aapc_95_percent_ci', brackets = TRUE, stratifier_column == 'Poverty income ratio: > 400%', preventive_practice == 'Two or more A1C tests')`).
+The trend for dentist visits for the overall adult population with diabetes was stable over the study period, averaging 35.7% (34.2%, 37.2%) (Table 1). Adults age 65--74 and ≥75 years had average annual percent increases of `r pullNumber2(in_text_prop_tab_sans_2020, 'aapc_95_percent_ci', brackets = FALSE, CI = FALSE, stratifier_column == 'Age: 65 to 74', preventive_service == 'One or more dentist visits')` and `r pullNumber2(in_text_prop_tab_sans_2020, 'apc_period_1_95_percent_ci', brackets = FALSE, CI = FALSE, stratifier_column == 'Age: 75+', preventive_service == 'One or more dentist visits')`, respectively. Non-Hispanic White adults with diabetes had an average annual percent increase of `r pullNumber2(in_text_prop_tab_sans_2020, 'aapc_95_percent_ci', brackets = FALSE, CI = FALSE, stratifier_column == 'Race/Ethnicity: White/not Hispanic', preventive_service == 'One or more dentist visits')`. Among those with private insurance, we found decreasing proportions visiting the dentist during 2008--2015 (APC `r pullNumber2(in_text_prop_tab_sans_2020, 'apc_period_1_95_percent_ci', brackets = TRUE, CI = FALSE, stratifier_column == 'Insurance coverage: Private only', preventive_service == 'One or more dentist visits')`), followed by an increase after 2015 (APC `r pullNumber2(in_text_prop_tab_sans_2020, 'apc_period_2_95_percent_ci', brackets = TRUE, CI = FALSE, stratifier_column == 'Insurance coverage: Private only', preventive_service == 'One or more dentist visits')`. The trends for adults with diabetes in the poverty income ratio group \< 100% and those with a high school education had multiple changes upward and downward during the study period.
 
-## Dilated eye exam
+## A1C Tests
 
-The overall proportion receiving dilated eye exams was stable during 2008--2019 (Table 1). Similarly for males, we observed stable trends from 2008 to 2011 but a significant decrease after 2011 (APC: `r pullNumber2(prop_tab_sans_2020, 'apc_period_2_95_percent_ci', brackets = TRUE, stratifier_column == 'Sex: Male', preventive_practice == 'Dilated eye exam')`). Uninsured adults with diabetes had average annual increases in the receipt of dilated eye exams of `r pullNumber2(prop_tab_sans_2020, 'aapc_95_percent_ci', brackets = TRUE, stratifier_column == 'Insurance coverage: Uninsured', preventive_practice == 'Dilated eye exam')`. Adults with diabetes in the highest income to poverty income ratio group (\> 400%) had a flat trend in dilated eye examinations until 2013, after which the proportion significantly decreased (APC: `r pullNumber2(prop_tab_sans_2020, 'apc_period_2_95_percent_ci', brackets = TRUE, stratifier_column == 'Poverty income ratio: > 400%', preventive_practice == 'Dilated eye exam')`).
+We observed no significant changes in the overall trend in the proportion of adults receiving two or more A1C tests in a year, which averaged 53.0% (95% CI: 51.4%, 54.5%) over the study period (Table 1). Proportions increased annually by `r pullNumber2(in_text_prop_tab_sans_2020, 'aapc_95_percent_ci', brackets = FALSE, CI = FALSE, stratifier_column == 'Age: 45 to 64', preventive_service == 'Two or more A1C tests')`, `r pullNumber2(in_text_prop_tab_sans_2020, 'aapc_95_percent_ci', brackets = FALSE, CI = FALSE, stratifier_column == 'Age: 65 to 74', preventive_service == 'Two or more A1C tests')`, and `r pullNumber2(in_text_prop_tab_sans_2020, 'aapc_95_percent_ci', brackets = FALSE, CI = FALSE, stratifier_column == 'Age: 75+', preventive_service == 'Two or more A1C tests')` for those age 45--64, 65--74, and ≥75 years, respectively. We also found increases in A1C testing for Hispanic adults (AAPC `r pullNumber2(in_text_prop_tab_sans_2020, 'aapc_95_percent_ci', brackets = TRUE, CI = FALSE, stratifier_column == 'Race/Ethnicity: Hispanic', preventive_service == 'Two or more A1C tests')` ), non-Hispanic White adults (AAPC `r pullNumber2(in_text_prop_tab_sans_2020, 'aapc_95_percent_ci', brackets = TRUE, CI = FALSE, stratifier_column == 'Race/Ethnicity: White/not Hispanic', preventive_service == 'Two or more A1C tests')`), those with Medicare only (AAPC `r pullNumber2(in_text_prop_tab_sans_2020, 'aapc_95_percent_ci', brackets = TRUE, CI = FALSE, stratifier_column == 'Insurance coverage: Medicare only', preventive_service == 'Two or more A1C tests')`), and those in the highest poverty income ratio group (\> 400%) (AAPC `r pullNumber2(in_text_prop_tab_sans_2020, 'aapc_95_percent_ci', brackets = TRUE, CI = FALSE, stratifier_column == 'Poverty income ratio: > 400%', preventive_service == 'Two or more A1C tests')`).
 
-## Foot exam
+## Dilated Eye Exam
 
-The trend for foot exams for the overall adult population with diabetes was flat until 2011, after which it decreased (APC: `r pullNumber2(prop_tab_sans_2020, 'apc_period_2_95_percent_ci', brackets = TRUE, stratifier_column == 'Overall', preventive_practice == 'Foot examination')`, Table 1). We found an increase in foot exams among adults with diabetes age 65--74 until 2014 (APC: `r pullNumber2(prop_tab_sans_2020, 'apc_period_1_95_percent_ci', brackets = TRUE, stratifier_column == 'Age: 65 to 74', preventive_practice == 'Foot examination')`), and the trend was flat thereafter.
+The overall proportion receiving dilated eye exams was stable during 2008--2019 (Table 1). This proportion averaged 55.5% (95% CI: 54.0%, 57.0%) over this period. Similarly, for males, we observed stable trends from 2008 to 2011 but a significant decrease after 2011 (APC `r pullNumber2(in_text_prop_tab_sans_2020, 'apc_period_2_95_percent_ci', brackets = FALSE, CI = FALSE, stratifier_column == 'Sex: Male', preventive_service == 'Dilated eye exam')`). Uninsured adults with diabetes had average annual increase from 2008 to 2019 in the receipt of dilated eye exams of `r pullNumber2(in_text_prop_tab_sans_2020, 'aapc_95_percent_ci', brackets = FALSE, CI = FALSE, stratifier_column == 'Insurance coverage: Uninsured', preventive_service == 'Dilated eye exam')`. Adults with diabetes in the highest income group (poverty income ratio \> 400%) had a flat trend in dilated eye examinations until 2013, after which the proportion significantly decreased (APC `r pullNumber2(in_text_prop_tab_sans_2020, 'apc_period_2_95_percent_ci', brackets = TRUE, CI = FALSE, stratifier_column == 'Poverty income ratio: > 400%', preventive_service == 'Dilated eye exam')`).
 
-## One or more dentist visits
+## Foot Exam
 
-Adults age 65--74 and ≥75 years had average annual percent increases of `r pullNumber2(prop_tab_sans_2020, 'aapc_95_percent_ci', brackets = FALSE, stratifier_column == 'Age: 65 to 74', preventive_practice == 'One or more dentist visits')` and `r pullNumber2(prop_tab_sans_2020, 'apc_period_1_95_percent_ci', brackets = FALSE, stratifier_column == 'Age: 75+', preventive_practice == 'One or more dentist visits')`, respectively. Non-Hispanic White adults with diabetes had an average annual percent increase of `r pullNumber2(prop_tab_sans_2020, 'aapc_95_percent_ci', brackets = FALSE, stratifier_column == 'Race/Ethnicity: White/Not Hispanic', preventive_practice == 'One or more dentist visits')`. Among those with private insurance, we found decreasing proportions visiting the dentist during 2008--2015 (APC `r pullNumber2(prop_tab_sans_2020, 'apc_period_1_95_percent_ci', brackets = TRUE, stratifier_column == 'Insurance coverage: Private only', preventive_practice == 'One or more dentist visits')`), followed by an increase after 2015 (APC: `r pullNumber2(prop_tab_sans_2020, 'apc_period_2_95_percent_ci', brackets = TRUE, stratifier_column == 'Insurance coverage: Private only', preventive_practice == 'One or more dentist visits')`. The trends for adults with diabetes in the poverty income ratio group \< 100% and those with a high school education had multiple changes in direction during the study period.
+The average proportion of U.S. adults with diabetes receiving a foot exam over the study period was 61.4% (95% CI: 60.0%, 62.8%). The trend for foot exams for the overall adult population with diabetes was flat until 2011, after which it decreased (APC `r pullNumber2(in_text_prop_tab_sans_2020, 'apc_period_2_95_percent_ci', brackets = TRUE, CI = FALSE, stratifier_column == 'Overall', preventive_service == 'Foot examination')`, Table 1). We found an increase in foot exams among adults with diabetes age 65--74 years until 2014 (APC `r pullNumber2(in_text_prop_tab_sans_2020, 'apc_period_1_95_percent_ci', brackets = TRUE, CI = FALSE, stratifier_column == 'Age: 65 to 74', preventive_service == 'Foot examination')`), and the trend was flat thereafter.
 
-## Absence of preventive care services
+## Absence of Preventive Care Services
 
-In 2008, 5.1% (95% CI: 2.7%, 7.5%) adults with diabetes reported receiving none of the six recommended care services. In 2019, this estimate was 6.1% (95% CI: 3.7%, 8.5%) and in 2020 it was 8.2% (95% CI: 4.5%, 11.9%).
+In 2008, 5.1% (95% CI: 2.7%, 7.5%) of adults with diabetes reported receiving none of the six recommended care services. In 2019, this estimate was 6.1% (3.7%, 8.5%) and in 2020 it was 8.2% (4.5%, 11.9%).
 
-## Comparisons among subgroups
+## Comparisons Among Subgroups
 
-The youngest adults (18--44 years) often reported lower rates of dilated eye exams, foot exams, cholesterol testing, and influenza vaccination (Supplemental Figure 1 & 2). Uninsured adults also often reported the lowest rates of preventive care for dilated eye exams, foot exams, cholesterol testing, and A1C testing. Adults with less than a high school education were less likely to visit the dentist in most years, although they were only significantly less likely to visit the dentist from 2008--2010, 2013--2014, and in 2020.
+The youngest adults (18--44 years) often reported lower rates of dilated eye exams, foot exams, cholesterol testing, and influenza vaccination. Uninsured adults often reported the lowest rates of preventive care for dilated eye exams, foot exams, cholesterol testing, and A1C testing. Adults with less than a high school education were less likely to visit the dentist in most years, although they were only statistically significantly less likely to visit the dentist in 2008--2010, 2013--2014, and 2020.
 
 # Discussion
 
-Despite the recovery from the Great Recession in 2008 and the passing of the Affordable Care Act (ACA) in 2010, we found no significant change over time in five out of the six preventive care services for the overall US adult population with diabetes. Influenza vaccination was the only preventive service that increased during 2008--2019. Among subgroups, influenza vaccine uptake, A1c testing, and dental visits tended to improve. However, foot exams, cholesterol testing, and dental visits among the uninsured tended to decline. While the passing of the ACA led to an increase in the number of adults with diagnosed and undiagnosed diabetes that have health insurance and an increase in their use of health care services [@myerson2019; @simon2017], detecting corresponding increases in the receipt of preventive care has proved more elusive. As of 2020, 8.2% of adults with diabetes had received none of the six preventive services.
+The passing of the Affordable Care Act (ACA) in 2010 and subsequent Medicaid expansion has been seen as a mechanism to increase the receipt of preventive services [@luo2019]; however, we found no significant change over time in five out of the six preventive care services for the overall U.S. adult population with diagnosed diabetes from 2008 to 2019. Influenza vaccination was the only preventive service that increased significantly during 2008--2019 overall. Among subgroups, influenza vaccine uptake, A1C testing, and dental visits tended to improve. However, foot exams, cholesterol testing, and dental visits among the uninsured tended to decline. While the passing of the ACA led to an increase in the number of adults with diagnosed and undiagnosed diabetes who have health insurance, and an increase in their use of health care services [@myerson2019; @simon2017], detecting corresponding increases in the receipt of preventive care has proved more elusive. As of 2019, 6.1% of adults with diabetes had not received any of the six preventive services, and this percentage grew to 8.2% in 2020 during the onset of the COVID-19 pandemic.
 
-Two studies that used data from BRFSS found no changes overall in the receipt of preventive care for adults with diabetes as a result of the Medicaid expansion between 2014 and 2019 [@monnette2020; @luo2019]. Similarly the majority of subgroups exhibited no change or decreased in receipt of these six preventive services. The subgroup trends we observed suggest disparities in diabetes care that have been shown in other research. Consistent with our findings, studies using data from NHANES for 2005--2018 as well as BRFSS from 2004--2014 both found that younger adults with diabetes were less likely to report receiving various recommended preventive care services [@shin2021; @luo2018]. Additionally, insurance was a barrier to preventive care, as uninsured adults also reported lower rates of preventive care in these studies [@shin2021; @luo2018]. In our study, dental visits decreased over the study period but dilated eye exams increased. Education has also been linked to meeting recommendations for preventive care, with adults with lower education consistently reporting lower rates of prevention [@eppley2019; @shin2021]. We found that adults with less than a high school education had decreasing trends in cholesterol testing and frequently were less likely to report visiting the dentist at least once than adults with higher educational attainment, although this difference was not always statistically significant. Future research may wish to examine the percentage of adults with diabetes reporting receiving none of the six preventive care services. While the confidence intervals for the estimates from 2008 and 2019/2020 overlap, the increase highlights there is sustained inadequate preventive care for a subset of adults with diabetes.
+Two studies that used data from BRFSS found no changes overall in the receipt of preventive care for adults with diabetes resulting from Medicaid expansion between 2014 and 2019 [@monnette2020; @luo2019]. Similarly, the majority of subgroups in these studies exhibited no change in or decreased receipt of these six preventive services. The subgroup trends we observed suggest disparities in diabetes care that have been shown in other research. Consistent with our findings, studies using NHANES data for 2005--2018 as well as BRFSS for 2004--2014 both found that younger adults with diabetes were less likely to report receiving various recommended preventive care services [@shin2021; @luo2018]. Additionally, lack of insurance was a barrier to preventive care, as uninsured adults also reported lower rates of preventive care in these studies [@shin2021; @luo2018]. In our study, dental visits decreased over the study period but dilated eye exams increased among the uninsured. Education has also been linked to meeting recommendations for preventive care; adults with lower education consistently report lower rates of prevention [@eppley2019; @shin2021]. We found that adults with less than a high school education had decreasing trends in cholesterol testing and frequently were less likely to report visiting the dentist at least once than adults with more education, although this difference was not always statistically significant. Future research may wish to examine those adults with diabetes who reported receiving none of the six preventive care services, and factors contributing to this lack of care. While the confidence intervals for the estimates from 2008 and 2019/2020 overlap, the increase highlights the sustained suboptimal preventive care for a subset of adults with diabetes.
 
-A1C testing and influenza vaccinations were the only two preventive services that showed increases either among the overall population or various subgroups, which may be linked with the increase in health care service usage [@myerson2019]. These services can be administered at the point-of-care during regular physician visits, whereas a dilated eye exam or dental visit require separate appointments. Lack of access to specialists, limited provider acceptance of public insurance options like Medicare, and inadequate care coordination may further complicate access to dilated eye exams or dentist visits and may explain why, for most groups, we observed no change or a decrease in the receipt of these services [@chen2020; @eppley2019; @fathy2016].
+A1C testing and influenza vaccinations were the only two preventive services that showed increases either among the overall population or various subgroups which may be linked with the increase in health care service usage [@myerson2019]. A1C increased among: adults age 45 -- 65, 65 -- 74, > 75 years, Hispanic adults, non-Hispanic White adults, adults on Medicare only, and adults in the > 400% poverty income ratio group. Influenza vaccine increased among: non-Hispanic White adults, adult females, adult males, adults in the 200% -- 399% poverty income ratio group, and adults in the > 400% poverty income ratio group. These services can be administered at the point-of-care during regular physician visits, whereas a dilated eye exam or dental visit require separate appointments. Lack of access to specialists, limited provider acceptance of public insurance options like Medicare, and inadequate care coordination may further complicate access to dilated eye exams or dentist visits and may explain why, for most groups, we observed no change or a decrease in the receipt of these services [@chen2020; @eppley2019; @fathy2016].
 
-Other studies on trends in preventive care using different data sources report some conflicting findings. A study using data from NHANES found increases in the proportion of adults with diabetes that reported having a primary care doctor, received an annual check-up with a physician, had at least two A1C tests in a year, had their cholesterol levels tested, and had an annual foot exam by a doctor @shin2021. Another study that reported on data from NHANES, the National Health Interview Survey (NHIS), and BRFSS found that foot exams, influenza vaccinations, and A1C testing increased from 1999 - 2016, although dilated eye exams stayed roughly constant @fang2020. Data from BRFSS showed that adults with diabetes had reported decreasing dentist visits from 2004 to 2014 [@luo2018], while reported dilated eye examinations increased briefly following expansion of Medicaid in 2014 and then decreased [@chen2020]. In contrast, a study using data from NHANES found that dilated eye exams for adults with diabetes did not increase from 2005 to 2016 [@eppley2019]. No change was found for rates of influenza vaccination from 2007 to 2018 for the overall population of adults with diabetes when evaluated using data from NHIS [@hung2020]. Differences in the results of these surveys may be due to differences in how questions are phrased and differences in the population being asked questions. Additionally, it is difficult to compare trends for overlapping time periods of different lengths so caution should be used when interpreting these differences; when possible, trends should be compared over similar, longer time periods [@cusser2021; @bahlai2021].
+Other studies on trends in preventive care using different data sources report some conflicting findings. A study using NHANES data from 2005 to 2018 found increases in the proportion of adults with diabetes who reported: having a primary care doctor, receiving an annual check-up with a physician, having had at least two A1C tests in a year, having their cholesterol levels tested, and having an annual foot exam by a doctor @shin2021. Another study that reported on data from NHANES, NHIS, and BRFSS found that foot exams, influenza vaccinations, and A1C testing increased from 1999 to 2016, although dilated eye exams stayed roughly constant @fang2020. Data from BRFSS showed that adults with diabetes had reported decreasing dentist visits from 2004 to 2014 [@luo2018], while patient-reported dilated eye examinations increased briefly following Medicaid expansion in 2014 and then decreased [@chen2020]. In contrast, a study using NHANES data found that dilated eye exams for adults with diabetes did not increase from 2005 to 2016 [@eppley2019]. A study using NHIS data reported no change in influenza vaccination rates from 2007 to 2018 for the overall population of adults with diabetes [@hung2020]. Differences in these survey results may be due to differences in how questions are phrased and differences in the population being surveyed. Additionally, it is difficult to compare trends for overlapping time periods of different lengths, so caution should be used when interpreting these differences; when possible, trends should be compared over similar, longer time periods [@cusser2021; @bahlai2021].
 
 ## Limitations
 
-The responses from MEPS were self-reported which may introduce bias. The study group was also cross-sectional and does not provide insight into how past receipt of preventive services may affect future receipt. In 2013, MEPS implemented efforts to improve collection of complete information by field interviewers with the goal of improving underreporting. This effort may have improved data quality after 2014 and could have impacted our trend analyses. Furthermore, changes to the NHIS sample design in 2016 were made to better cover the target population and reduce bias.
+The responses from MEPS were self-reported which may introduce bias. The study group was also cross-sectional and does not provide insight into how past receipt of preventive services may affect future receipt. In 2013, MEPS implemented efforts to improve collection of complete information by using field interviewers, with the goal of improving under reporting. This effort may have improved data quality after 2014 and could have impacted our trend analyses. 
 
-We are also unable to identify factors that are causally linked to the changes in trends. Additionally, there has been a steadily declining response rate for both MEPS and DCS from a peak during the studied time period of 59.3% and 92.4%, respectively in 2008 to 39.5% and 65.8%, respectively, in 2019 and 27.6% and 59.3%, respectively in 2020. Although weights for these data were adjusted for non-response, the direction of bias due to non-response cannot be known. Furthermore, we were unable to distinguish between type 1 and type 2 diabetes in these data. Because of the greater prevalence of type 2 diabetes the trends we report likely are more reflective of type 2 diabetes than type 1.
+We are unable to identify factors that are causally linked to the changes in trends. Additionally, there has been a steadily declining response rate for both MEPS and DCS from a peak during the studied time period from 59.3% and 92.4%, respectively in 2008 to 39.5% and 65.8%, respectively, in 2019 and 27.6% and 59.3%, respectively in 2020. Although weights for these data were adjusted for non-response, the direction of bias due to non-response cannot be known. Furthermore, we were unable to distinguish between type 1 and type 2 diabetes in these data. Because of the greater proportion of type 2 diabetes (90% -- 95%), the trends we report likely are more reflective of type 2 diabetes than type 1 diabetes.
 
 # Conclusions
 
-In summary, with the exception of influenza vaccination, overall, the receipt of preventive care for diabetes from 2008 to 2019 was flat. The trend pattern in subgroups was heterogeneous. This work highlights services and specific subgroups that could be targeted to improve preventive care, especially groups that reported declines in receipt of preventive care. Declining trends in preventive care may lead to increasing diabetes complications, increasing the morbidity of diabetes.
+In summary, with the exception of influenza vaccination, the overall receipt of preventive care for diabetes from 2008 to 2019 was flat. The trend pattern in subgroups was heterogeneous. This work highlights services and subgroups with low or declining receipt of these services that could be targeted to improve preventive care. Declining trends in preventive care may lead to increased diabetes complications, thereby increasing morbidity as well as cost of diabetes care.
 
 # Acknowledgements
+
+*Funding:* The authors report no funding sources.
+
+*Conflict of Interest:* The authors of this study declare no conflicts of interest.
+
+*Author Contributions and Guarantor Statement:* J.T.W., K.M.B., S.R.B. conceptualized the study and contributed to discussion. J.T.W. curated and analyzed data, and wrote the first draft of the manuscript. K.M.B. and S.R.B. reviewed the manuscript, and all authors edited the manuscript. J.T.W. is the guarantor of this work and, as such, had full access to all the data in the study and takes responsibility for the integrity of the data and the accuracy of the data analysis.
 
 # References
 
@@ -1627,11 +1690,10 @@ In summary, with the exception of influenza vaccination, overall, the receipt of
 # Tables
 
 ```{r}
-#| label: tbl-prev
-#| tbl-cap: Age-adjusted trends in proportions of US adults with diabetes that report receiving at least three of six recommended care practices - at least one dental visit, one dilated eye exam, one foot exam, two or more A1C tests, cholesterol level tested, and receiving an influenza vaccine.
+#| tbl-cap: Age-adjusted trends in proportions of U.S. adults with diabetes who report receiving at least three of six recommended care services—at least one dental visit, one dilated eye exam, one foot exam, two or more A1C tests, cholesterol level tested, and an influenza vaccine.
 
 proportion_table_sans_2020 %>% 
-  tab_header("Age-adjusted trends in proportions of US adults with diabetes that report receiving recommended care services - at least one dental visit, one dilated eye exam, one foot exam, two or more A1C tests, cholesterol level tested, and receiving an influenza vaccine.")
+  tab_header("Table 1—Age-adjusted trends in proportions of U.S. adults with diabetes that report receiving recommended care services - at least one dental visit, one dilated eye exam, one foot exam, two or more A1C tests, cholesterol level tested, and receiving an influenza vaccine.")
 ```
 
 \pagebreak
@@ -1640,7 +1702,7 @@ proportion_table_sans_2020 %>%
 
 ```{r}
 #| label: fig-exams
-#| fig-cap: Age-adjusted trends in proportions of US adults with diabetes who reported receiving recommended medical examinations from 2008 - 2019. The dashed black line is the overall trend, while dots represent percentages for 2020. Data from 2020 was not included in the trend analysis.
+#| fig-cap: Age-adjusted trends in proportions of U.S. adults with diabetes who reported receiving recommended medical examinations from 2008 to 2019. The dashed black line is the overall trend, while dots represent percentages for 2020. Data from 2020 were not included in the trend analysis.
 #| fig-width: 8
 
 all_exam_plots_sans_2020
@@ -1650,7 +1712,7 @@ all_exam_plots_sans_2020
 
 ```{r}
 #| label: fig-tests
-#| fig-cap: Age-adjusted trends in proportions of US adults with diabetes who reported receiving recommended lab tests and vaccinations. The dashed black line is the overall trend, while dots represent percentages for 2020. Data from 2020 was not included in the trend analysis.
+#| fig-cap: Age-adjusted trends in proportions of U.S. adults with diabetes who reported receiving recommended lab tests and vaccinations. The dashed black line is the overall trend, while dots represent percentages for 2020. Data from 2020 were not included in the trend analysis.
 #| fig-width: 10
 
 all_test_plots_sans_2020
@@ -1658,14 +1720,18 @@ all_test_plots_sans_2020
 
 \pagebreak
 
+# Figure Legends
+
+Figure 1—Age-adjusted trends in proportions of U.S. adults with diabetes who reported receiving recommended medical examinations from 2008 to 2019. The dashed black line is the overall trend, while dots represent percentages for 2020. Data from 2020 were not included in the trend analysis.
+
+Figure 2—Age-adjusted trends in proportions of U.S. adults with diabetes who reported receiving recommended lab tests and vaccinations. The dashed black line is the overall trend, while dots represent percentages for 2020. Data from 2020 were not included in the trend analysis.
+
 # Supplement
 
 ```{r}
-#| label: tbl-prop
-#| tbl-cap: Age-adjusted trends in proportions of US adults with diabetes that report receiving six recommended care services - at least one dental visit, one dilated eye exam, one foot exam, two or more A1C tests, cholesterol level tested, and receiving an influenza vaccine.
 
 supplement_prop_tab %>% 
-  tab_header('Age-adjusted trends in proportions of US adults overall and by subgroup with diabetes that report receiving six recommended care services - at least one dental visit, one dilated eye exam, one foot exam, two or more A1C tests, cholesterol level tested, and receiving an influenza vaccine.')
+  tab_header('Age-adjusted trends in proportions of U.S. adults with diabetes, overall and by subgroup, who report receiving six recommended care services—at least one dental visit, one dilated eye exam, one foot exam, two or more A1C tests, cholesterol level tested, and an influenza vaccine.')
 ```
 
 ```{r}
@@ -1676,7 +1742,7 @@ supp_dat <- age_adjusted_stats %>%
       filter(strata != 'Total') %>%
       filter(stratifier != 'overall') %>% 
       filter(strata != 'Not available') %>%
-      filter(strata != 'Other Race/Not Hispanic') %>%
+      filter(strata != 'Other Race/not Hispanic') %>%
       filter(strata != 'Other') %>% 
       mutate(variable_text = case_when(variable == 'a1c' ~ '2 or more A1C tests',
                                        variable == 'CHOL_all' ~ 'Cholesterol tested',
@@ -1702,8 +1768,8 @@ supp_dat$poverty$strata <-
     levels = c('Poor/Negative', 'Low income', 'Middle income', 'High income'), 
     labels = c(
       'd< 100%',
-      'c100% - 199%',
-      'b200% - 399%',
+      'c100%—199%',
+      'b200%—399%',
       'a> 400% '
     ),
     ordered = TRUE
@@ -1845,14 +1911,14 @@ supplemental_test_plots[[4]] <-
   scale_color_manual(
     name = 'Poverty income ratio',
     labels = c('a> 400% '     = '> 400%',
-               'b200% - 399%' = '200% - 399%',
-               'c100% - 199%' = '100% - 199%',
+               'b200%—399%' = '200%—399%',
+               'c100%—199%' = '100%—199%',
                'd< 100%'      = '< 100%'),
     
     values = c(
       'a> 400% ' = color_pal[1],
-      'b200% - 399%' = color_pal[2],
-      'c100% - 199%' = color_pal[3],
+      'b200%—399%' = color_pal[2],
+      'c100%—199%' = color_pal[3],
       'd< 100%' = color_pal[4]
     )
   ) 
@@ -1866,16 +1932,16 @@ supplemental_test_plots[[5]] <-
   scale_color_manual(
     name = 'Race & Ethnicity',
     labels = c(
-     'Asian/Not Hispanic' = 'Asian/Not Hispanic',
-     'Black/Not Hispanic' = 'Black/Not Hispanic',
+     'Asian/not Hispanic' = 'Asian/not Hispanic',
+     'Black/not Hispanic' = 'Black/not Hispanic',
      'Hispanic'           = 'Hispanic',
-     'White/Not Hispanic' = 'White/Not Hispanic'
+     'White/not Hispanic' = 'White/not Hispanic'
     ),
     values = c(
-     'Asian/Not Hispanic' = color_pal[1],
-     'Black/Not Hispanic'  = color_pal[2],
+     'Asian/not Hispanic' = color_pal[1],
+     'Black/not Hispanic'  = color_pal[2],
      'Hispanic' = color_pal[3],
-     'White/Not Hispanic' = color_pal[4]
+     'White/not Hispanic' = color_pal[4]
     )
   )
 supplemental_test_plots[[6]] <-
@@ -1974,13 +2040,13 @@ supplemental_exam_plots[[4]] <-
   scale_color_manual(
     name = 'Poverty income ratio',
     labels = c('a> 400% '     = '> 400%',
-               'b200% - 399%' = '200% - 399%',
-               'c100% - 199%' = '100% - 199%',
+               'b200%—399%' = '200%—399%',
+               'c100%—199%' = '100%—199%',
                'd< 100%'      = '< 100%'),
     values = c(
       'a> 400% '     = color_pal[1],
-      'b200% - 399%' = color_pal[2],
-      'c100% - 199%' = color_pal[3],
+      'b200%—399%' = color_pal[2],
+      'c100%—199%' = color_pal[3],
       'd< 100%'      = color_pal[4]
     )
   )  
@@ -1996,16 +2062,16 @@ supplemental_exam_plots[[5]] <-
   scale_color_manual(
     name = 'Race & Ethnicity',
     labels = c(
-      'Asian/Not Hispanic' = 'Asian/Not Hispanic',
-      'Black/Not Hispanic' = 'Black/Not Hispanic',
+      'Asian/not Hispanic' = 'Asian/not Hispanic',
+      'Black/not Hispanic' = 'Black/not Hispanic',
       'Hispanic'           = 'Hispanic',
-      'White/Not Hispanic' = 'White/Not Hispanic'
+      'White/not Hispanic' = 'White/not Hispanic'
     ),
     values = c(
-      'Asian/Not Hispanic' = color_pal[1],
-      'Black/Not Hispanic' = color_pal[2],
+      'Asian/not Hispanic' = color_pal[1],
+      'Black/not Hispanic' = color_pal[2],
       'Hispanic'           = color_pal[3],
-      'White/Not Hispanic' = color_pal[4]
+      'White/not Hispanic' = color_pal[4]
     )
   ) 
 
@@ -2065,13 +2131,14 @@ ggsave(plot = supplemental_all_test,
 
 ```{r}
 #| include: FALSE
-#| fig-cap: Age-adjusted proportions with 95% confidence intervals of US adults with diabetes who reported receiving recommended medical examinations from 2008 - 2020. 
+#| fig-cap: Age-adjusted proportions with 95% confidence intervals of U.S. adults with diabetes who reported receiving recommended medical examinations from 2008 - 2020. 
 supplemental_all_exam
 ```
 
 ```{r}
 #| include: FALSE
-#| fig-cap: Age-adjusted proportions with 95% confidence intervals of US adults with diabetes who reported receiving recommended lab tests and vaccinations from 2008 - 2020.
+#| fig-cap: Age-adjusted proportions with 95% confidence intervals of U.S. adults with diabetes who reported receiving recommended lab tests and vaccinations from 2008 - 2020.
 supplemental_all_test
 ```
 :::
+

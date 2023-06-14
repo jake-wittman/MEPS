@@ -332,17 +332,17 @@ cleanMepsData <- function(dat) {
       RACETHNX = recode_factor(
         RACETHNX,
         `1` = 'Hispanic',
-        `2` = 'Black/Not Hispanic',
-        `3` = 'Asian/Not Hispanic',
-        `4` = 'Other Race/Not Hispanic',
-      ) %>% fct_expand('White/Not Hispanic'),
+        `2` = 'Black/not Hispanic',
+        `3` = 'Asian/not Hispanic',
+        `4` = 'Other Race/not Hispanic',
+      ) %>% fct_expand('White/not Hispanic'),
       RACETHX = recode_factor(
         RACETHX,
         `1` = 'Hispanic',
-        `2` = 'White/Not Hispanic',
-        `3` = 'Black/Not Hispanic',
-        `4` = 'Asian/Not Hispanic',
-        `5` = 'Other Race/Not Hispanic',
+        `2` = 'White/not Hispanic',
+        `3` = 'Black/not Hispanic',
+        `4` = 'Asian/not Hispanic',
+        `5` = 'Other Race/not Hispanic',
       ),
       # USBORN42 = recode_factor(
       #   USBORN42,
@@ -442,7 +442,7 @@ cleanMepsData <- function(dat) {
 
     )
 
-  temp_dat$RACETHNX[temp_dat$RACEX == 'White'] <- 'White/Not Hispanic'
+  temp_dat$RACETHNX[temp_dat$RACEX == 'White'] <- 'White/not Hispanic'
   return(temp_dat)
 }
 
@@ -534,7 +534,7 @@ relevelFactors <- function(dat) {
 }
 
 # This function calculates proportion of individuals following prventive
-# care practices in each year and for the different strata.
+# care services in each year and for the different strata.
 calcProp <- function(data, year, variable = NULL) {
   if (is.character(variable)) {
     vari <- enquo(variable)
@@ -637,9 +637,9 @@ combineRace <- function(meps_data, dash_data) {
       ),
       RACE_all = case_when(
         RACE_all == 'Hispanic' ~ 'hispanic',
-        RACE_all == 'Black/Not Hispanic' ~ 'black',
-        RACE_all == 'White/Not Hispanic' ~ 'white',
-        RACE_all == 'Asian/Not Hispanic' ~ 'asian',
+        RACE_all == 'Black/not Hispanic' ~ 'black',
+        RACE_all == 'White/not Hispanic' ~ 'white',
+        RACE_all == 'Asian/not Hispanic' ~ 'asian',
         TRUE ~ as.character(RACE_all)
       )
     ) %>%
@@ -972,9 +972,9 @@ joinTables <- function(indicator_table, suppression_table, variable = NULL) {
       mutate(
         suppression_table,
         strata = case_when(strata == 'Hispanic' ~ 'hispanic',
-                           strata == 'Black/Not Hispanic' ~ 'black',
-                           strata == 'Asian/Not Hispanic' ~ 'asian',
-                           strata == 'White/Not Hispanic' ~ 'white',
+                           strata == 'Black/not Hispanic' ~ 'black',
+                           strata == 'Asian/not Hispanic' ~ 'asian',
+                           strata == 'White/not Hispanic' ~ 'white',
                            TRUE ~ strata),
         year = as.numeric(year),
         variable = case_when(variable == 'FLU_all' ~ 'flu',
@@ -1039,9 +1039,9 @@ suppressData <- function(data) {
   )
 }
 
-cumulativePractices <- function(data) {
+cumulativeServices <- function(data) {
   data %>%
-    # Create columns that binary indicate if each individual met the appropriate practice (1) or not (0)
+    # Create columns that binary indicate if each individual met the appropriate service (1) or not (0)
     mutate(chol_bin = case_when(CHOL_all == 'Within last year' ~ 1, TRUE ~ 0),
            a1c_bin = case_when(DSA1C53 == '2 or more A1C tests in a year' ~ 1, TRUE ~ 0),
            eye_bin = case_when(DSEY_all == 'YES' ~ 1, TRUE ~ 0),
@@ -1050,58 +1050,58 @@ cumulativePractices <- function(data) {
            flu_bin = case_when(FLU_all == 'Within last year' ~ 1, TRUE ~ 0)
            ) %>%
     rowwise() %>%
-    mutate(sum_practices = sum(c_across(ends_with('bin')))) %>%
+    mutate(sum_services = sum(c_across(ends_with('bin')))) %>%
     ungroup() %>%
-    mutate(zero_practices = case_when(sum_practices == 0 ~ 1, TRUE ~ 0),
-           one_practices = case_when(sum_practices == 1 ~ 1, TRUE ~ 0),
-           two_practices = case_when(sum_practices == 2 ~ 1, TRUE ~ 0),
-           three_practices = case_when(sum_practices == 3 ~ 1, TRUE ~ 0),
-           four_practices = case_when(sum_practices == 4 ~ 1, TRUE ~ 0),
-           five_practices = case_when(sum_practices == 5 ~ 1, TRUE ~ 0),
-           six_practices = case_when(sum_practices == 6 ~ 1, TRUE ~ 0),
-           atleast_one_practices = case_when(sum_practices >= 1 ~ 1, TRUE ~ 0),
-           atleast_two_practices = case_when(sum_practices >= 2 ~ 1, TRUE ~ 0),
-           atleast_three_practices = case_when(sum_practices >= 3 ~ 1, TRUE ~ 0),
-           atleast_four_practices = case_when(sum_practices >= 4 ~ 1, TRUE ~ 0),
-           atleast_five_practices = case_when(sum_practices >= 5 ~ 1, TRUE ~ 0),
-           atleast_six_practices = case_when(sum_practices >= 6 ~ 1, TRUE ~ 0)) %>%
+    mutate(zero_services = case_when(sum_services == 0 ~ 1, TRUE ~ 0),
+           one_services = case_when(sum_services == 1 ~ 1, TRUE ~ 0),
+           two_services = case_when(sum_services == 2 ~ 1, TRUE ~ 0),
+           three_services = case_when(sum_services == 3 ~ 1, TRUE ~ 0),
+           four_services = case_when(sum_services == 4 ~ 1, TRUE ~ 0),
+           five_services = case_when(sum_services == 5 ~ 1, TRUE ~ 0),
+           six_services = case_when(sum_services == 6 ~ 1, TRUE ~ 0),
+           atleast_one_services = case_when(sum_services >= 1 ~ 1, TRUE ~ 0),
+           atleast_two_services = case_when(sum_services >= 2 ~ 1, TRUE ~ 0),
+           atleast_three_services = case_when(sum_services >= 3 ~ 1, TRUE ~ 0),
+           atleast_four_services = case_when(sum_services >= 4 ~ 1, TRUE ~ 0),
+           atleast_five_services = case_when(sum_services >= 5 ~ 1, TRUE ~ 0),
+           atleast_six_services = case_when(sum_services >= 6 ~ 1, TRUE ~ 0)) %>%
     select(-ends_with('bin'))
 }
 
-preventivePractice <- function(survey.object, by = NULL, data) {
+preventiveService <- function(survey.object, by = NULL, data) {
     out_table <- tbl_svysummary(
       survey.object,
       by = by,
       digits = list(everything() ~ 12),
       include = c(
-        zero_practices,
-        one_practices,
-        two_practices,
-        three_practices,
-        four_practices,
-        five_practices,
-        six_practices,
-        atleast_one_practices,
-        atleast_two_practices,
-        atleast_three_practices,
-        atleast_four_practices,
-        atleast_five_practices,
-        atleast_six_practices
+        zero_services,
+        one_services,
+        two_services,
+        three_services,
+        four_services,
+        five_services,
+        six_services,
+        atleast_one_services,
+        atleast_two_services,
+        atleast_three_services,
+        atleast_four_services,
+        atleast_five_services,
+        atleast_six_services
       ),
       label = list(
-        zero_practices ~ "No preventive practices followed",
-        one_practices ~ "One preventive practice followed",
-        two_practices ~ "Two preventive practices followed",
-        three_practices ~ "Three preventive practices followed",
-        four_practices ~ "Four preventive practices followed",
-        five_practices ~ "Five preventive practices followed",
-        six_practices ~ "Six preventive practices followed",
-        atleast_one_practices ~ "At least one preventive practice followed",
-        atleast_two_practices ~ "At least two preventive practices followed",
-        atleast_three_practices ~ "At least three preventive practices followed",
-        atleast_four_practices ~ "At least four preventive practices followed",
-        atleast_five_practices ~ "At least five preventive practices followed",
-        atleast_six_practices ~ "At least six preventive practices followed"
+        zero_services ~ "No preventive services followed",
+        one_services ~ "One preventive service followed",
+        two_services ~ "Two preventive services followed",
+        three_services ~ "Three preventive services followed",
+        four_services ~ "Four preventive services followed",
+        five_services ~ "Five preventive services followed",
+        six_services ~ "Six preventive services followed",
+        atleast_one_services ~ "At least one preventive service followed",
+        atleast_two_services ~ "At least two preventive services followed",
+        atleast_three_services ~ "At least three preventive services followed",
+        atleast_four_services ~ "At least four preventive services followed",
+        atleast_five_services ~ "At least five preventive services followed",
+        atleast_six_services ~ "At least six preventive services followed"
       ),
       statistic = list(all_categorical() ~ "{n}-{N}-{p}-{p.std.error}-{n_unweighted}-{N_unweighted}-{p_unweighted}")
     )
