@@ -848,7 +848,7 @@ list(
       .x$aapc
     }) %>%
       bind_rows(.id = 'group.service') %>%
-      filter(str_detect(group.service, 'atleast_three')) %>%
+      filter(str_detect(group.service, 'zero_services') | str_detect(group.service, 'atleast_six_services')) %>%
       separate(group.service, c('stratifier', 'service'), sep = '[.]') %>%
       mutate(strata = case_when(stratifier == 'overall' ~ 'stat_0',
                                 TRUE ~ strata)) %>%
@@ -875,7 +875,7 @@ tar_target(
     .x$apc
   }) %>%
     bind_rows(.id = 'group.service') %>%
-    filter(str_detect(group.service, 'atleast_three')) %>%
+    filter(str_detect(group.service, 'zero_services') | str_detect(group.service, 'atleast_six_services')) %>%
     separate(group.service, c('stratifier', 'service'), sep = '[.]') %>%
     mutate(strata = case_when(stratifier == 'overall' ~ 'stat_0',
                               TRUE ~ strata)) %>%
@@ -984,7 +984,7 @@ tar_target(
     .x$aapc
   }) %>%
     bind_rows(.id = 'group.service') %>%
-    filter(str_detect(group.service, 'atleast_three')) %>%
+    filter(str_detect(group.service, 'zero_services') | str_detect(group.service, 'atleast_six_services')) %>%
     separate(group.service, c('stratifier', 'service'), sep = '[.]') %>%
     mutate(strata = case_when(stratifier == 'overall' ~ 'stat_0',
                               TRUE ~ strata)) %>%
@@ -1011,7 +1011,7 @@ tar_target(
     .x$apc
   }) %>%
     bind_rows(.id = 'group.service') %>%
-    filter(str_detect(group.service, 'atleast_three')) %>%
+    filter(str_detect(group.service, 'zero_services') | str_detect(group.service, 'atleast_six_services')) %>%
     separate(group.service, c('stratifier', 'service'), sep = '[.]') %>%
     mutate(strata = case_when(stratifier == 'overall' ~ 'stat_0',
                               TRUE ~ strata)) %>%
